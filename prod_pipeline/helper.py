@@ -1,0 +1,118 @@
+import json
+import yaml
+import logging
+import traceback
+import smtplib
+from datetime import datetime, timezone
+from email.message import EmailMessage
+from typing import Dict, Any
+
+import undetected_chromedriver as uc
+import soccerdata._common as common
+
+try:
+    from prod_pipeline.config import ScrapeDataConfig
+except ImportError:
+    from config import ScrapeDataConfig
+
+logger = logging.getLogger(__name__)
+
+CHROME_MAJOR = 147
+
+
+def setup_logging(level: int = logging.INFO) -> None:
+    logging.basicConfig(
+        level=level,
+        format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
+    )
+
+
+def patch_soccerdata_chromedriver() -> None:
+    """Patch SoccerData Selenium reader to use undetected_chromedriver."""
+
+    def patched_init_webdriver(self):
+        opts = uc.ChromeOptions()
+        opts.add_argument("--no-sandbox")
+        opts.add_argument("--disable-dev-shm-usage")
+        opts.add_argument("--start-maximized")
+        return uc.Chrome(options=opts, version_main=CHROME_MAJOR)
+
+    common.BaseSeleniumReader._init_webdriver = patched_init_webdriver
+
+
+def patch_soccerdata_json_loader() -> None:
+    """Handle WhoScored responses where JSON is wrapped inside minimal HTML."""
+
+    def tolerant_json_load(fp, *args, **kwargs):
+        content = fp.read()
+        if isinstance(content, bytes):
+            content = content.decode("utf-8", errors="ignore")
+
+        content = content.strip()
+        if content.startswith("<html"):
+            start = content.find("{")
+            end = content.rfind("}") + 1
+            if start != -1 and end > start:
+                content = content[start:end]
+
+        return json.loads(content)
+
+    json.load = tolerant_json_load
+
+
+def patch_soccerdata() -> None:
+    """Apply all SoccerData runtime patches."""
+    patch_soccerdata_chromedriver()
+    patch_soccerdata_json_loader()
+
+
+def load_yaml_config(path: str) -> Dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return yaml.safe_load(f)
+
+
+def load_app_config(path: str) -> ScrapeDataConfig:
+    raw = load_yaml_config(path)
+    return ScrapeDataConfig.parse_obj(raw)
+
+
+def send_email(
+    smtp_host: str,
+    smtp_port: int,
+    username: str,
+    password: str,
+    from_email: str,
+    to_email: str,
+    subject: str,
+    body: str,
+    use_tls: bool = True,
+    timeout: int = 20,
+) -> None:
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = from_email
+    msg["To"] = to_email
+    msg.set_content(body)
+
+    try:
+        if use_tls:
+            with smtplib.SMTP(smtp_host, smtp_port, timeout=timeout) as server:
+                server.starttls()
+                server.login(username, password)
+                server.send_message(msg)
+        else:
+            with smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout) as server:
+                server.login(username, password)
+                server.send_message(msg)
+
+        logger.info("Sent email to %s", to_email)
+    except Exception:
+        logger.exception("Failed to send email to %s", to_email)
+        raise
+
+
+def format_exception(exc: Exception) -> str:
+    return (
+        f"{type(exc).__name__}: {exc}\n"
+        f"Traceback:\n{traceback.format_exc()}"
+    )

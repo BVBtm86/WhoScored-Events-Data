@@ -1,0 +1,37 @@
+
+mongo:
+  backup_folder: /Users/mario_omescu/Library/Mobile Documents/com~apple~CloudDocs/Sports Analytics/WhoScored Events Data/mongo_backup
+  db: "WhoScored"
+  url: "mongodb://localhost:27017/"
+  collection:
+    collection_teams: available_teams
+    collection_schedule: game_schedule
+    collection_logs: error_logs
+    collection_raw_events: game_raw_events
+    collection_processed_events: game_processed_events
+
+season: 
+  year: "2025-2026"
+  league: "GER-Bundesliga"
+  name: "Bundesliga"
+  country: "Germany"
+
+email:
+  smtp_host: "smtp.gmail.com"
+  smtp_port: 587
+  username: "omescu.mario.lucian@gmail.com"
+  from_email: "omescu.mario.lucian@gmail.com"
+  to_email: "omescu.mario.lucian@gmail.com"
+  use_tls: true
+
+schedule_games:
+  finished_status_code: 6
+  required_columns: 
+    - game_id
+    - status
+    - start_time
+    - home_team_id
+    - home_team
+    - away_team_id
+    - away_team
+    - week

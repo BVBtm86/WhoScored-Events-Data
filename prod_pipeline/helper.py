@@ -3,6 +3,7 @@ import yaml
 import logging
 import traceback
 import smtplib
+import os
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import Dict, Any
@@ -19,13 +20,11 @@ logger = logging.getLogger(__name__)
 
 CHROME_MAJOR = 147
 
-
 def setup_logging(level: int = logging.INFO) -> None:
     logging.basicConfig(
         level=level,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
-
 
 def patch_soccerdata_chromedriver() -> None:
     """Patch SoccerData Selenium reader to use undetected_chromedriver."""
@@ -73,6 +72,18 @@ def load_yaml_config(path: str) -> Dict[str, Any]:
 
 def load_app_config(path: str) -> ScrapeDataConfig:
     raw = load_yaml_config(path)
+
+    email_raw = raw.get("email", {})
+    email_cfg = {
+        **email_raw,
+        "username": os.getenv("SMTP_EMAIL", email_raw.get("username")),
+        "from_email": os.getenv("SMTP_EMAIL", email_raw.get("from_email")),
+        "to_email": os.getenv("SMTP_EMAIL", email_raw.get("to_email")),
+        "password": os.getenv("SMTP_PASSWORD", email_raw.get("password")),
+    }
+
+    raw["email"] = email_cfg
+
     return ScrapeDataConfig.parse_obj(raw)
 
 

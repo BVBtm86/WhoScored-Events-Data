@@ -19,9 +19,9 @@ season:
 email:
   smtp_host: "smtp.gmail.com"
   smtp_port: 587
-  username: "omescu.mario.lucian@gmail.com"
-  from_email: "omescu.mario.lucian@gmail.com"
-  to_email: "omescu.mario.lucian@gmail.com"
+  username: "YOUR_EMAIL"
+  from_email: "YOUR_EMAIL"
+  to_email: "YOUR_EMAIL"
   use_tls: true
 
 schedule_games:

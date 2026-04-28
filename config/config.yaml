@@ -1,6 +1,6 @@
 
 mongo:
-  backup_folder: /Users/mario_omescu/Library/Mobile Documents/com~apple~CloudDocs/Sports Analytics/WhoScored Events Data/mongo_backup
+  backup_folder: ./mongo_backup
   db: "WhoScored"
   url: "mongodb://localhost:27017/"
   collection:

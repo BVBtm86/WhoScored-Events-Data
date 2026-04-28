@@ -21,14 +21,65 @@ class GameSchedule:
             leagues=config.season.league,
             seasons=config.season.year,
         )
+        self.fbref = sd.FBref(
+            leagues=config.season.league,
+            seasons=config.season.year,
+        )
+
         self.client = MongoClient(config.mongo.url)
         self.db = self.client[config.mongo.db]
         self.collection_schedule = self.db[config.mongo.collection['collection_schedule']]
         self.collection_teams = self.db[config.mongo.collection['collection_teams']]
 
+    def _read_team_mapping(self) -> dict[int, str]:
+        cursor = self.collection_teams.find(
+            {},
+            {"_id": 0, "ws_team_id": 1, "fbref_team_name": 1},
+        )
+
+        return {
+            int(doc["ws_team_id"]): doc["fbref_team_name"]
+            for doc in cursor
+        }
+
     def _read_season_schedule(self) -> pd.DataFrame:
         df = self.ws.read_schedule(force_cache=False)
         return df.reset_index(drop=False)
+
+    def _read_fbref_schedule(self) -> pd.DataFrame:
+
+        df = self.fbref.read_schedule().reset_index(drop=False)
+
+        df["fbref_date"] = pd.to_datetime(df["date"]).dt.date
+
+        return df[["week", "fbref_date", "home_team", "away_team"]].rename(
+            columns={
+                "home_team": "fbref_home_team",
+                "away_team": "fbref_away_team",
+                "week": "week",
+            }
+        )
+    
+    def _process_fbref_schedule(self,
+                                df_ws: pd.DataFrame) -> pd.DataFrame:
+    
+        team_map = self._read_team_mapping()
+
+        df_ws["match_date"] = pd.to_datetime(df_ws["start_time"]).dt.date
+        df_ws["fbref_home_team"] = df_ws["home_team_id"].astype(int).map(team_map)
+        df_ws["fbref_away_team"] = df_ws["away_team_id"].astype(int).map(team_map)
+
+        df_fbref = self._read_fbref_schedule()
+
+        df = pd.merge(
+            left=df_ws,
+            right=df_fbref,
+            left_on=["match_date", "fbref_home_team", "fbref_away_team"],
+            right_on=["fbref_date", "fbref_home_team", "fbref_away_team"],
+            how="left",
+        )
+
+        return df
 
     def _validate_required_columns(self, df: pd.DataFrame) -> None:
         required = set(self.config.schedule_games.required_columns)
@@ -52,7 +103,9 @@ class GameSchedule:
     def _build_docs(self, df: pd.DataFrame) -> list[dict]:
         docs: list[dict] = []
         for row in df.to_dict(orient='records'):
+            game_id = int(row["game_id"])
             start_time = row.get('game_date')
+            week = int(row.get("week"))
             if pd.notna(start_time):
                 if hasattr(start_time, 'to_pydatetime'):
                     start_time = start_time.to_pydatetime()
@@ -60,10 +113,10 @@ class GameSchedule:
                 start_time = None
 
             docs.append({
-                'game_id': int(row['game_id']),
+                'game_id': game_id,
                 'game_date': start_time,
                 'season': self.config.season.year,
-                'week': int(row.get('week')) if row.get('week') is not None and str(row.get('week')).isdigit() else None,
+                'week': week,
                 'competition_name': self.config.season.name,
                 'competition_country': self.config.season.country,
                 'home_team_id': row.get('home_team_id'),
@@ -75,8 +128,11 @@ class GameSchedule:
         return docs
 
     def save_schedule(self) -> Dict[str, int]:
-        schedule_df = self._read_season_schedule()
-        finished_df = self._prepare_finished_schedule(schedule_df)
+        
+        df_ws = self._read_season_schedule()
+        schedule_df = self._process_fbref_schedule(df_ws=df_ws)
+
+        finished_df = self._prepare_finished_schedule(df=schedule_df)
         if finished_df.empty:
             logger.info('No finished games found in schedule.')
             self.client.close()

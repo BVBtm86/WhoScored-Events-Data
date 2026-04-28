@@ -70,7 +70,41 @@ def load_yaml_config(path: str) -> Dict[str, Any]:
         return yaml.safe_load(f)
 
 
+def _find_env_file(start: str) -> str | None:
+    current = os.path.abspath(start)
+    if os.path.isfile(current):
+        current = os.path.dirname(current)
+
+    while True:
+        candidate = os.path.join(current, ".env")
+        if os.path.exists(candidate):
+            return candidate
+
+        parent = os.path.dirname(current)
+        if parent == current:
+            return None
+        current = parent
+
+
+def load_env_file(path: str) -> None:
+    env_path = _find_env_file(path) or _find_env_file(os.getcwd())
+    if not env_path:
+        return
+
+    with open(env_path, "r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line or line.startswith("#") or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            key = key.strip()
+            value = value.strip().strip('"').strip("'")
+            os.environ.setdefault(key, value)
+
+
 def load_app_config(path: str) -> ScrapeDataConfig:
+    load_env_file(path)
     raw = load_yaml_config(path)
 
     email_raw = raw.get("email", {})

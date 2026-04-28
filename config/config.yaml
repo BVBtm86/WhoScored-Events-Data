@@ -19,9 +19,6 @@ season:
 email:
   smtp_host: "smtp.gmail.com"
   smtp_port: 587
-  username: "YOUR_EMAIL"
-  from_email: "YOUR_EMAIL"
-  to_email: "YOUR_EMAIL"
   use_tls: true
 
 schedule_games:

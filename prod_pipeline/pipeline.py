@@ -2,14 +2,13 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Dict
-
+from datetime import datetime
 from helper import setup_logging, patch_soccerdata, load_app_config, send_email, format_exception, logger
 from game_schedule import GameSchedule
 from raw_events import RawEvents
 from backup_data import backup_season_data
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
-
 
 def build_report(schedule: Dict[str, int], raw_events: Dict[str, int], backup: Dict[str, int]) -> str:
     return (
@@ -42,8 +41,9 @@ def main(config_path: Path | str = CONFIG_PATH) -> None:
         report = f"Pipeline failed: {format_exception(exc)}"
         logger.exception('Pipeline execution failed.')
 
-    if config.email.password:
-        subject = f"WhoScored pipeline {status} | {config.season.year}"
+    if config.email and config.email.password:
+        day = datetime.now().date().strftime('%d-%m-%Y')
+        subject = f"{day} WhoScored pipeline {status} | {config.season.year}"
         send_email(
             smtp_host=config.email.smtp_host,
             smtp_port=config.email.smtp_port,
@@ -56,7 +56,7 @@ def main(config_path: Path | str = CONFIG_PATH) -> None:
             use_tls=config.email.use_tls,
         )
     else:
-        logger.warning('Email not sent because SMTP password is missing.')
+        logger.warning('Email not sent because SMTP password is missing or email is not configured.')
 
 
 if __name__ == '__main__':

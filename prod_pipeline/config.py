@@ -16,9 +16,9 @@ class SeasonConfig(BaseModel):
 class EmailConfig(BaseModel):
     smtp_host: str
     smtp_port: int
-    username: str
-    from_email: str
-    to_email: str
+    username: Optional[str] = None
+    from_email: Optional[str] = None
+    to_email: Optional[str] = None
     use_tls: bool = True
     password: Optional[str] = None
 

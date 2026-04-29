@@ -7,12 +7,8 @@ from zipfile import ZipFile, ZIP_DEFLATED
 from bson import json_util
 from pymongo import MongoClient
 
-try:
-    from prod_pipeline.helper import setup_logging, load_app_config, logger
-    from prod_pipeline.config import ScrapeDataConfig
-except ImportError:
-    from helper import setup_logging, load_app_config, logger
-    from config import ScrapeDataConfig
+from helper import setup_logging, load_app_config, logger
+from config import ScrapeDataConfig
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 

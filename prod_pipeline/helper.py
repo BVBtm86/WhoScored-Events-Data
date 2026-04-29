@@ -11,10 +11,7 @@ from typing import Dict, Any
 import undetected_chromedriver as uc
 import soccerdata._common as common
 
-try:
-    from prod_pipeline.config import ScrapeDataConfig
-except ImportError:
-    from config import ScrapeDataConfig
+from config import ScrapeDataConfig
 
 logger = logging.getLogger(__name__)
 

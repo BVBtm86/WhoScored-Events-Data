@@ -4,6 +4,7 @@ import logging
 import traceback
 import smtplib
 import os
+from pathlib import Path
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import Dict, Any
@@ -35,7 +36,6 @@ def patch_soccerdata_chromedriver() -> None:
 
     common.BaseSeleniumReader._init_webdriver = patched_init_webdriver
 
-
 def patch_soccerdata_json_loader() -> None:
     """Handle WhoScored responses where JSON is wrapped inside minimal HTML."""
 
@@ -55,17 +55,14 @@ def patch_soccerdata_json_loader() -> None:
 
     json.load = tolerant_json_load
 
-
 def patch_soccerdata() -> None:
     """Apply all SoccerData runtime patches."""
     patch_soccerdata_chromedriver()
     patch_soccerdata_json_loader()
 
-
 def load_yaml_config(path: str) -> Dict[str, Any]:
     with open(path, "r", encoding="utf-8") as f:
         return yaml.safe_load(f)
-
 
 def _find_env_file(start: str) -> str | None:
     current = os.path.abspath(start)
@@ -81,7 +78,6 @@ def _find_env_file(start: str) -> str | None:
         if parent == current:
             return None
         current = parent
-
 
 def load_env_file(path: str) -> None:
     env_path = _find_env_file(path) or _find_env_file(os.getcwd())
@@ -99,10 +95,17 @@ def load_env_file(path: str) -> None:
             value = value.strip().strip('"').strip("'")
             os.environ.setdefault(key, value)
 
-
 def load_app_config(path: str) -> ScrapeDataConfig:
     load_env_file(path)
     raw = load_yaml_config(path)
+    config_path = Path(path).resolve()
+    project_root = config_path.parent.parent
+
+    backup_folder = raw.get("mongo", {}).get("backup_folder")
+    if backup_folder:
+        backup_path = Path(backup_folder).expanduser()
+        if not backup_path.is_absolute():
+            raw["mongo"]["backup_folder"] = str(project_root / backup_path)
 
     email_raw = raw.get("email", {})
     email_cfg = {
@@ -116,7 +119,6 @@ def load_app_config(path: str) -> ScrapeDataConfig:
     raw["email"] = email_cfg
 
     return ScrapeDataConfig.parse_obj(raw)
-
 
 def send_email(
     smtp_host: str,
@@ -151,7 +153,6 @@ def send_email(
     except Exception:
         logger.exception("Failed to send email to %s", to_email)
         raise
-
 
 def format_exception(exc: Exception) -> str:
     return (

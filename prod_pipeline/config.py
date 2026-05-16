@@ -26,8 +26,16 @@ class ScheduleGamesConfig(BaseModel):
     finished_status_code: int
     required_columns: list[str]
 
+class GameStatsConfig(BaseModel):
+    team_match_features: list[str]
+    player_match_features: list[str]
+    team_stats: list[str]
+    pass_complettion_stats: list[str]
+    perc_stats: Dict[str, Dict[str, str]]
+
 class ScrapeDataConfig(BaseModel):
     mongo: MongoConfig
     season: SeasonConfig
     email: EmailConfig
     schedule_games: ScheduleGamesConfig
+    game_stats: GameStatsConfig

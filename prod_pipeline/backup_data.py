@@ -24,6 +24,9 @@ def backup_season_data(config: ScrapeDataConfig) -> Dict[str, int]:
     collections = {
         'schedule': config.mongo.collection['collection_schedule'],
         'raw_events': config.mongo.collection['collection_raw_events'],
+        'processed_events': config.mongo.collection['collection_processed_events'],
+        'team_game_stats': config.mongo.collection.get('collection_team_game_stats', 'game_team_stats'),
+        'player_game_stats': config.mongo.collection.get('collection_player_game_stats', 'game_player_stats'),
     }
 
     exported_count = 0

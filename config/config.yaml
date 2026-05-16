@@ -9,9 +9,11 @@ mongo:
     collection_logs: error_logs
     collection_raw_events: game_raw_events
     collection_processed_events: game_processed_events
+    collection_team_game_stats: game_team_stats
+    collection_player_game_stats: game_player_stats
 
 season: 
-  year: "2025-2026"
+  year: "2009-2010"
   league: "GER-Bundesliga"
   name: "Bundesliga"
   country: "Germany"
@@ -32,3 +34,283 @@ schedule_games:
     - away_team_id
     - away_team
     - week
+
+game_stats:
+  team_match_features:
+    - game_id
+    - game_date
+    - game_status
+    - competition_name
+    - competition_country
+    - season
+    - week
+    - team_id
+    - team_name
+    - opponent_team_id
+    - opponent_team_name
+    - game_venue
+
+  player_match_features:
+    - game_id
+    - game_date
+    - game_status
+    - competition_name
+    - competition_country
+    - season
+    - week
+    - team_id
+    - team_name
+    - opponent_team_id
+    - opponent_team_name
+    - game_venue
+    - player_id
+    - player
+    - starting_lineup
+    - minutes_played
+
+  team_stats:
+    - shot_event
+    - shot_goal 
+    - shot_on_target 
+    - shot_off_target 
+    - shot_woodwork
+    - shot_blocked
+    - shot_own_goal
+    - shot_zone_6_yard_box
+    - shot_zone_penalty_area
+    - shot_zone_outside_box
+    - shot_open_play
+    - shot_fastbreak
+    - shot_set_piece
+    - shot_penalty
+    - shot_right_foot
+    - shot_left_foot
+    - shot_head
+    - shot_other_body_part
+    - pass_attempt
+    - pass_completed
+    - pass_cross
+    - pass_freekick
+    - pass_corner
+    - pass_through_ball
+    - pass_throw_in
+    - pass_key_pass
+    - pass_long
+    - pass_short
+    - pass_chipped
+    - pass_ground
+    - pass_head
+    - pass_feet
+    - pass_forward
+    - pass_backward
+    - pass_left
+    - pass_right
+    - pass_defensive_third
+    - pass_mid_third
+    - pass_final_third
+    - dribble_event
+    - dribble_successful
+    - dribble_unsuccessful
+    - tackle_attempted_event
+    - tackle_gained_possession
+    - tackle_did_not_get_possession
+    - tackle_was_dribbled
+    - interception_event
+    - clearance_event
+    - clearance_head
+    - clearance_feet
+    - block_event
+    - blocked_shot
+    - blocked_cross
+    - offside_pass
+    - foul_committed
+    - foul_suffered
+    - aerial_duel_event
+    - aerial_duel_won
+    - aerial_duel_lost
+    - touch_event
+    - loss_possession_event
+    - dispossessed
+    - turnover
+    - error_event
+    - error_leading_to_shot
+    - error_leading_to_goal
+    - goalkeeper_event
+    - save_event
+    - claim_event
+    - punch_event
+    - keeper_pickup
+    - keeper_sweeper
+    - ball_recovery_event
+    - card_event
+    - yellow_card
+    - second_yellow_card
+    - red_card
+
+  pass_complettion_stats:
+    - pass_cross
+    - pass_long
+    - pass_short
+    - pass_chipped
+    - pass_ground
+    - pass_head
+    - pass_feet
+    - pass_forward
+    - pass_backward
+    - pass_left
+    - pass_right
+    - pass_defensive_third
+    - pass_mid_third
+    - pass_final_third
+
+  perc_stats:
+    shot_accuracy:
+      numerator: shot_on_target
+      denominator: shot_event
+    goal_conversion_pct:
+      numerator: shot_goal
+      denominator: shot_event
+    shot_on_target_conversion_pct:
+      numerator: shot_goal
+      denominator: shot_on_target
+    shot_blocked_pct:
+      numerator: shot_blocked
+      denominator: shot_event
+    shot_outside_box_pct:
+      numerator: shot_zone_outside_box
+      denominator: shot_event
+    shot_inside_box_pct:
+      numerator: shot_zone_inside_box
+      denominator: shot_event
+    shot_6_yard_box_pct:
+      numerator: shot_zone_6_yard_box
+      denominator: shot_event
+    shot_penalty_area_pct:
+      numerator: shot_zone_penalty_area
+      denominator: shot_event
+    shot_open_play_pct:
+      numerator: shot_open_play
+      denominator: shot_event
+    shot_fastbreak_pct:
+      numerator: shot_fastbreak
+      denominator: shot_event
+    shot_set_piece_pct:
+      numerator: shot_set_piece
+      denominator: shot_event
+    shot_penalty_pct:
+      numerator: shot_penalty
+      denominator: shot_event
+    shot_foot_pct:
+      numerator: shot_foot
+      denominator: shot_event
+    shot_right_foot_pct:
+      numerator: shot_right_foot
+      denominator: shot_foot
+    shot_left_foot_pct:
+      numerator: shot_left_foot
+      denominator: shot_foot
+    shot_head_pct:
+      numerator: shot_head
+      denominator: shot_event
+    shot_other_body_part_pct:
+      numerator: shot_other_body_part
+      denominator: shot_event
+    pass_completion_pct:
+      numerator: pass_completed
+      denominator: pass_attempt
+    pass_cross_completion_pct:
+      numerator: pass_cross_completed
+      denominator: pass_cross
+    pass_long_pct:
+      numerator: pass_long
+      denominator: pass_attempt
+    pass_short_pct:
+      numerator: pass_short
+      denominator: pass_attempt
+    pass_long_completion_pct:
+      numerator: pass_long_completed
+      denominator: pass_long
+    pass_short_completion_pct:
+      numerator: pass_short_completed
+      denominator: pass_short
+    pass_chipped_pct:
+      numerator: pass_chipped
+      denominator: pass_attempt
+    pass_ground_pct:
+      numerator: pass_ground
+      denominator: pass_attempt
+    pass_chipped_completion_pct:
+      numerator: pass_chipped_completed
+      denominator: pass_chipped
+    pass_ground_completion_pct:
+      numerator: pass_ground_completed
+      denominator: pass_ground
+    pass_head_pct:
+      numerator: pass_head
+      denominator: pass_attempt
+    pass_feet_pct:
+      numerator: pass_feet
+      denominator: pass_attempt
+    pass_head_completion_pct:
+      numerator: pass_head_completed
+      denominator: pass_head
+    pass_feet_completion_pct:
+      numerator: pass_feet_completed
+      denominator: pass_feet
+    pass_forward_pct:
+      numerator: pass_forward
+      denominator: pass_attempt
+    pass_backward_pct:
+      numerator: pass_backward
+      denominator: pass_attempt
+    pass_forward_completion_pct:
+      numerator: pass_forward_completed
+      denominator: pass_forward
+    pass_backward_completion_pct:
+      numerator: pass_backward_completed
+      denominator: pass_backward
+    pass_left_pct:
+      numerator: pass_left
+      denominator: pass_attempt
+    pass_right_pct:
+      numerator: pass_right
+      denominator: pass_attempt
+    pass_left_completion_pct:
+      numerator: pass_left_completed
+      denominator: pass_left
+    pass_right_completion_pct:
+      numerator: pass_right_completed
+      denominator: pass_right
+    pass_defensive_third_pct:
+      numerator: pass_defensive_third
+      denominator: pass_attempt
+    pass_mid_third_pct:
+      numerator: pass_mid_third
+      denominator: pass_attempt
+    pass_final_third_pct:
+      numerator: pass_final_third
+      denominator: pass_attempt
+    pass_defensive_third_completion_pct:
+      numerator: pass_defensive_third_completed
+      denominator: pass_defensive_third
+    pass_mid_third_completion_pct:
+      numerator: pass_mid_third_completed
+      denominator: pass_mid_third
+    pass_final_third_completion_pct:
+      numerator: pass_final_third_completed
+      denominator: pass_final_third
+    dribble_success_pct:
+      numerator: dribble_successful
+      denominator: dribble_event
+    tackle_success_pct:
+      numerator: tackle_gained_possession
+      denominator: tackle_attempted_event
+    aerial_duel_win_pct:
+      numerator: aerial_duel_won
+      denominator: aerial_duel_event
+    loss_possession_dispossessed_pct:
+      numerator: dispossessed
+      denominator: loss_possession_event
+    loss_possession_turnover_pct:
+      numerator: turnover
+      denominator: loss_possession_event

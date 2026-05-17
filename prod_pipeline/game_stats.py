@@ -15,6 +15,7 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
 
 class GameStats:
+
     def __init__(self, config: ScrapeDataConfig):
         self.config = config
         self.client = MongoClient(config.mongo.url)
@@ -25,9 +26,10 @@ class GameStats:
 
         self.team_match_features = config.game_stats.team_match_features
         self.player_match_features = config.game_stats.player_match_features
-        self.stat_columns = config.game_stats.team_stats
+        self.stat_columns = config.game_stats.match_stats
         self.pass_completion_base_columns = config.game_stats.pass_complettion_stats
         self.perc_stats = config.game_stats.perc_stats
+        self.STAT_MATCH_RENAME = config.game_stats.match_stats_rename
 
     def _processed_game_ids(self) -> Set[int]:
         return {
@@ -152,6 +154,18 @@ class GameStats:
             derived_columns.append(completed_col)
         return game_events, derived_columns
 
+    def _rename_output_stat_keys(self, stats: dict[str, Any]) -> dict[str, Any]:
+        return {self.STAT_MATCH_RENAME.get(key, key): value for key, value in stats.items()}
+
+    def _rename_interval_stat_keys(
+        self,
+        interval_lookup: dict[tuple[int, int], dict[str, dict[str, Any]]],
+    ) -> dict[tuple[int, int], dict[str, dict[str, Any]]]:
+        for interval_stats in interval_lookup.values():
+            for interval, stats in interval_stats.items():
+                interval_stats[interval] = self._rename_output_stat_keys(stats)
+        return interval_lookup
+
     @staticmethod
     def _interval_masks(game_events: pd.DataFrame) -> dict[str, pd.Series]:
         minute = pd.to_numeric(game_events['minute'], errors='coerce')
@@ -264,7 +278,7 @@ class GameStats:
                 key = (int(row['game_id']), int(row['team_id']))
                 interval_lookup.setdefault(key, {})[interval] = self._stat_dict(row, stat_value_columns)
         self._add_score_stats(interval_lookup, game_events)
-        return interval_lookup
+        return self._rename_interval_stat_keys(interval_lookup)
 
     def build_game_team_stats(self, game_events: pd.DataFrame, stat_columns: list[str]) -> pd.DataFrame:
         feature_columns = [c for c in self.team_match_features if c in game_events.columns]
@@ -416,6 +430,9 @@ class GameStats:
         players['stats'] = players.apply(
             lambda row: self._add_player_per_90_stats(row['stats'], row.get('minutes_played')),
             axis=1,
+        )
+        players['stats'] = players['stats'].apply(
+            lambda stats: self._rename_interval_stat_keys({(0, 0): stats})[(0, 0)]
         )
         return players[feature_columns + ['stats']]
 

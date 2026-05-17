@@ -250,15 +250,16 @@ class ProcessedEvents:
             ['Gained Possession', 'Did Not Get Possession', 'Was Dribbled'],
             default=None,
         )
-        events['clearance_body_part'] = np.select(
-            [t.eq('Clearance') & has(events, 'Head'), t.eq('Clearance')],
-            ['Head', 'Feet'],
-            default=None,
-        )
         outfielder_block = t.eq('Save') & has(events, 'OutfielderBlock')
         blocked_cross = t.eq('BlockedPass') | (t.eq('Clearance') & has(events, 'BlockedCross'))
         blocked_shot = t.eq('Block') | outfielder_block
         block_mask = blocked_cross | blocked_shot
+        clearance_mask = t.eq('Clearance') & ~has(events, 'BlockedCross')
+        events['clearance_body_part'] = np.select(
+            [clearance_mask & has(events, 'Head'), clearance_mask],
+            ['Head', 'Feet'],
+            default=None,
+        )
         events['block_type'] = np.select(
             [blocked_shot, blocked_cross],
             ['Blocked Shot', 'Blocked Cross'],
@@ -345,7 +346,7 @@ class ProcessedEvents:
         events['is_tackle_did_not_get_possession'] = events['tackle_result'].eq('Did Not Get Possession').astype(int)
         events['is_tackle_was_dribbled'] = events['tackle_result'].eq('Was Dribbled').astype(int)
         events['is_interception'] = t.eq('Interception').astype(int)
-        events['is_clearance'] = t.eq('Clearance').astype(int)
+        events['is_clearance'] = clearance_mask.astype(int)
         events['is_clearance_head'] = events['clearance_body_part'].eq('Head').astype(int)
         events['is_clearance_feet'] = events['clearance_body_part'].eq('Feet').astype(int)
         events['is_block'] = block_mask.astype(int)
@@ -534,7 +535,8 @@ class ProcessedEvents:
             'shot_right_foot', 'shot_left_foot', 'shot_head', 'shot_other_body_part',
             'shot_result', 'shot_zone', 'shot_situation', 'shot_body_part',
             'pass_attempt', 'pass_incomplete',
-            'pass_cross', 'pass_freekick', 'pass_corner', 'pass_through_ball', 'pass_throw_in', 'pass_key_pass', 'pass_key_pass_qualifier',
+            'pass_cross', 'pass_freekick', 'pass_corner', 'pass_through_ball', 'pass_throw_in',
+            'pass_key_pass', 'pass_key_pass_qualifier',
             'pass_long', 'pass_short', 'pass_length',
             'pass_chipped', 'pass_ground', 'pass_height',
             'pass_head', 'pass_feet', 'pass_body_part',

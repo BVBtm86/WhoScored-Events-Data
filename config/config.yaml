@@ -68,7 +68,7 @@ game_stats:
     - starting_lineup
     - minutes_played
 
-  team_stats:
+  match_stats:
     - shot_event
     - shot_goal 
     - shot_on_target 
@@ -314,3 +314,22 @@ game_stats:
     loss_possession_turnover_pct:
       numerator: turnover
       denominator: loss_possession_event
+
+  match_stats_rename:
+    shot_event: shots
+    dribble_event: dribbles
+    tackle_attempted_event: tackles_attempted
+    interception_event: interceptions
+    clearance_event: clearances
+    block_event: blocks
+    offside_pass: offsides
+    aerial_duel_event: aerial_duels
+    touch_event: touches
+    loss_possession_event: loss_of_possession
+    error_event: errors
+    goalkeeper_event: goalkeeper_actions
+    save_event: saves
+    claim_event: claims
+    punch_event: punches
+    ball_recovery_event: ball_recoveries
+    card_event: cards

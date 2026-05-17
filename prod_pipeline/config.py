@@ -29,9 +29,10 @@ class ScheduleGamesConfig(BaseModel):
 class GameStatsConfig(BaseModel):
     team_match_features: list[str]
     player_match_features: list[str]
-    team_stats: list[str]
+    match_stats: list[str]
     pass_complettion_stats: list[str]
     perc_stats: Dict[str, Dict[str, str]]
+    match_stats_rename: Dict[str, str] = {}
 
 class ScrapeDataConfig(BaseModel):
     mongo: MongoConfig

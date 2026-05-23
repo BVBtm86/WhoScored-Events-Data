@@ -207,6 +207,8 @@ class ProcessedEvents:
         events['shot_blocked'] = shot_blocked.astype(int)
         events['shot_woodwork'] = shot_woodwork.astype(int)
         events['shot_own_goal'] = own_goal.astype(int)
+        related_player_id = pd.to_numeric(events.get('related_player_id'), errors='coerce')
+        events['goal_assist'] = (shot_goal & has(events, 'Assisted') & related_player_id.notna()).astype(int)
 
         px = cls._num(events['x'])
         py = cls._num(events['y'])
@@ -447,6 +449,7 @@ class ProcessedEvents:
             'shot_woodwork': 'shot_woodwork',
             'shot_blocked': 'shot_blocked',
             'shot_own_goal': 'shot_own_goal',
+            'goal_assist': 'goal_assist',
             'pass_long': 'is_pass_long',
             'pass_short': 'is_pass_short',
             'pass_chipped': 'is_pass_chipped',
@@ -529,7 +532,8 @@ class ProcessedEvents:
             'offside_event', 'foul_event', 'aerial_duel_event', 'touch_event', 'loss_possession_event',
             'error_event', 'save_event', 'claim_event', 'punch_event',
             'goalkeeper_event', 'ball_recovery_event', 'card_event', 'substitution_event',
-            'shot_goal', 'shot_on_target', 'shot_off_target', 'shot_woodwork', 'shot_blocked', 'shot_own_goal',
+            'shot_goal', 'shot_on_target', 'shot_off_target', 'shot_woodwork', 'shot_blocked',
+            'shot_own_goal', 'goal_assist',
             'shot_zone_6_yard_box', 'shot_zone_penalty_area', 'shot_zone_outside_box',
             'shot_open_play', 'shot_fastbreak', 'shot_set_piece', 'shot_penalty',
             'shot_right_foot', 'shot_left_foot', 'shot_head', 'shot_other_body_part',

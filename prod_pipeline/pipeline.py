@@ -45,8 +45,8 @@ def main(config_path: Path | str = CONFIG_PATH, season_year: str | None = None) 
     status = 'SUCCESS'
 
     try:
-        schedule_status = GameSchedule(config).save_schedule()
-        raw_status = RawEvents(config).save_new_finished_games()
+        # schedule_status = GameSchedule(config).save_schedule()
+        # raw_status = RawEvents(config).save_new_finished_games()
         processed_status = ProcessedEvents(config).save_processed_raw_games()
         game_stats_status = GameStats(config).save_game_stats()
         if (

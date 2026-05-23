@@ -166,6 +166,100 @@ class GameStats:
                 interval_stats[interval] = self._rename_output_stat_keys(stats)
         return interval_lookup
 
+    def _append_goal_assist_rows(
+        self,
+        game_events: pd.DataFrame,
+        stat_columns: list[str],
+        *,
+        for_player: bool,
+    ) -> pd.DataFrame:
+        if 'pass_assist' not in stat_columns:
+            return game_events
+
+        game_events = game_events.copy()
+        game_events['pass_assist'] = 0
+        if not {'goal_assist', 'related_player_id'}.issubset(game_events.columns):
+            return game_events
+
+        goal_assist = pd.to_numeric(game_events['goal_assist'], errors='coerce').fillna(0).eq(1)
+        related_player_id = pd.to_numeric(game_events['related_player_id'], errors='coerce')
+        assist_rows = game_events[goal_assist & related_player_id.notna()].copy()
+        if assist_rows.empty:
+            return game_events
+
+        stat_cols = [col for col in stat_columns if col in assist_rows.columns]
+        assist_rows[stat_cols] = 0
+        assist_rows['pass_assist'] = 1
+        assist_rows['stat_event_type'] = 'assist'
+
+        if for_player:
+            player_lookup = (
+                game_events[['game_id', 'player_id', 'player']]
+                .dropna(subset=['player_id'])
+                .drop_duplicates(['game_id', 'player_id'])
+                .set_index(['game_id', 'player_id'])['player']
+            )
+            assist_rows['player_id'] = related_player_id.loc[assist_rows.index]
+            lookup_keys = pd.MultiIndex.from_frame(assist_rows[['game_id', 'player_id']])
+            assist_rows['player'] = player_lookup.reindex(lookup_keys).to_numpy()
+
+            for col in ['starting_lineup', 'minutes_played']:
+                if col not in game_events.columns:
+                    continue
+                value_lookup = (
+                    game_events[['game_id', 'player_id', col]]
+                    .dropna(subset=['player_id'])
+                    .drop_duplicates(['game_id', 'player_id'])
+                    .set_index(['game_id', 'player_id'])[col]
+                )
+                assist_rows[col] = value_lookup.reindex(lookup_keys).to_numpy()
+
+        return pd.concat([game_events, assist_rows], ignore_index=True)
+
+    def _append_goal_assist_player_identities(
+        self,
+        player_events: pd.DataFrame,
+        stat_columns: list[str],
+    ) -> pd.DataFrame:
+        if 'pass_assist' not in stat_columns:
+            return player_events
+        if not {'goal_assist', 'related_player_id'}.issubset(player_events.columns):
+            return player_events
+
+        goal_assist = pd.to_numeric(player_events['goal_assist'], errors='coerce').fillna(0).eq(1)
+        related_player_id = pd.to_numeric(player_events['related_player_id'], errors='coerce')
+        identity_rows = player_events[goal_assist & related_player_id.notna()].copy()
+        if identity_rows.empty:
+            return player_events
+
+        player_lookup = (
+            player_events[['game_id', 'player_id', 'player']]
+            .dropna(subset=['player_id'])
+            .drop_duplicates(['game_id', 'player_id'])
+            .set_index(['game_id', 'player_id'])['player']
+        )
+        identity_rows['player_id'] = related_player_id.loc[identity_rows.index]
+        lookup_keys = pd.MultiIndex.from_frame(identity_rows[['game_id', 'player_id']])
+        identity_rows['player'] = player_lookup.reindex(lookup_keys).to_numpy()
+        identity_rows['goal_assist'] = 0
+
+        for col in stat_columns:
+            if col in identity_rows.columns:
+                identity_rows[col] = 0
+
+        for col in ['starting_lineup', 'minutes_played']:
+            if col not in player_events.columns:
+                continue
+            value_lookup = (
+                player_events[['game_id', 'player_id', col]]
+                .dropna(subset=['player_id'])
+                .drop_duplicates(['game_id', 'player_id'])
+                .set_index(['game_id', 'player_id'])[col]
+            )
+            identity_rows[col] = value_lookup.reindex(lookup_keys).to_numpy()
+
+        return pd.concat([player_events, identity_rows], ignore_index=True)
+
     @staticmethod
     def _interval_masks(game_events: pd.DataFrame) -> dict[str, pd.Series]:
         minute = pd.to_numeric(game_events['minute'], errors='coerce')
@@ -216,6 +310,7 @@ class GameStats:
 
     def _summarize_by_team(self, game_events: pd.DataFrame, stat_columns: list[str]) -> pd.DataFrame:
         game_events, derived_columns = self._add_derived_event_stats(game_events)
+        game_events = self._append_goal_assist_rows(game_events, stat_columns, for_player=False)
         effective_stat_columns = [c for c in [*stat_columns, *derived_columns] if c in game_events.columns]
         game_events[effective_stat_columns] = (
             game_events[effective_stat_columns].apply(pd.to_numeric, errors='coerce').fillna(0)
@@ -373,6 +468,7 @@ class GameStats:
             return pd.DataFrame()
 
         player_events, derived_columns = self._add_derived_event_stats(player_events)
+        player_events = self._append_goal_assist_rows(player_events, stat_columns, for_player=True)
         effective_stat_columns = [c for c in [*stat_columns, *derived_columns] if c in player_events.columns]
         feature_columns = [c for c in self.player_match_features if c in player_events.columns]
         if not feature_columns:
@@ -415,6 +511,7 @@ class GameStats:
     def build_game_player_stats(self, game_events: pd.DataFrame, stat_columns: list[str]) -> pd.DataFrame:
         player_events = self._add_player_appearance_columns(game_events)
         player_events = player_events[player_events['player_id'].notna()].copy()
+        player_events = self._append_goal_assist_player_identities(player_events, stat_columns)
         feature_columns = [c for c in self.player_match_features if c in player_events.columns]
         if player_events.empty:
             return pd.DataFrame(columns=feature_columns + ['stats'])
@@ -469,7 +566,7 @@ class GameStats:
                     continue
 
                 game_events = self._prepare_game_events(game_events)
-                stat_columns = [c for c in self.stat_columns if c in game_events.columns]
+                stat_columns = list(self.stat_columns)
                 team_stats = self.build_game_team_stats(game_events, stat_columns)
                 player_stats = self.build_game_player_stats(game_events, stat_columns)
 

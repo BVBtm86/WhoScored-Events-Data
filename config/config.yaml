@@ -13,7 +13,7 @@ mongo:
     collection_player_game_stats: game_player_stats
 
 season: 
-  year: "2009-2010"
+  year: "2025-2026"
   league: "GER-Bundesliga"
   name: "Bundesliga"
   country: "Germany"
@@ -95,6 +95,7 @@ game_stats:
     - pass_through_ball
     - pass_throw_in
     - pass_key_pass
+    - pass_assist
     - pass_long
     - pass_short
     - pass_chipped

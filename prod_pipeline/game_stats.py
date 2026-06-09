@@ -20,9 +20,9 @@ class GameStats:
         self.config = config
         self.client = MongoClient(config.mongo.url)
         self.db = self.client[config.mongo.db]
-        self.collection_processed_events = self.db[config.mongo.collection['collection_processed_events']]
-        self.collection_team_stats = self.db[config.mongo.collection['collection_team_game_stats']]
-        self.collection_player_stats = self.db[config.mongo.collection['collection_player_game_stats']]
+        self.collection_processed_events = self.db[config.mongo.collections['collection_processed_events']]
+        self.collection_team_stats = self.db[config.mongo.collections['collection_team_game_stats']]
+        self.collection_player_stats = self.db[config.mongo.collections['collection_player_game_stats']]
 
         self.team_match_features = config.game_stats.team_match_features
         self.player_match_features = config.game_stats.player_match_features

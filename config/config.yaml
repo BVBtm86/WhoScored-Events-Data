@@ -3,7 +3,7 @@ mongo:
   backup_folder: ./mongo_backup
   db: "WhoScored"
   url: "mongodb://localhost:27017/"
-  collection:
+  collections:
     collection_teams: available_teams
     collection_schedule: game_schedule
     collection_logs: error_logs
@@ -11,6 +11,8 @@ mongo:
     collection_processed_events: game_processed_events
     collection_team_game_stats: game_team_stats
     collection_player_game_stats: game_player_stats
+    collection_shot_sequences: game_shot_sequences
+    collection_pass_sequences: game_pass_sequences
 
 season: 
   year: "2025-2026"
@@ -334,3 +336,155 @@ game_stats:
     punch_event: punches
     ball_recovery_event: ball_recoveries
     card_event: cards
+
+  sequence_game_features:
+    - game_id
+    - season
+    - competition_name
+    - competition_country
+    - game_date
+    - week
+    - home_team_id
+    - home_team_name
+    - away_team_id
+    - away_team_name
+    - period
+    - minute
+    - second
+    - expanded_minute
+    - event_idx
+    - team_id
+    - team
+    - player_id
+    - player
+    - x
+    - y
+    - end_x
+    - end_y
+    - type
+    - outcome_type
+
+sequence_data:
+  base_features:
+    - game_id
+    - season
+    - competition_name
+    - competition_country
+    - game_date
+    - week
+    - home_team_id
+    - home_team_name
+    - away_team_id
+    - away_team_name
+    - period
+    - minute
+    - second
+    - expanded_minute
+    - event_idx
+    - team_id
+    - team
+    - player_id
+    - player
+    - x
+    - y
+    - end_x
+    - end_y
+    - type
+    - outcome_type
+
+  sequence_action_types:
+    - Pass
+    - TakeOn
+    - BallRecovery
+    - Interception
+    - Tackle
+    - Aerial
+    - BallTouch
+    - GoodSkill
+
+  shot_types:
+    - Goal
+    - SavedShot
+    - MissedShots
+    - ShotOnPost
+
+  ignore_types:
+    - Save
+    - Claim
+    - Punch
+    - KeeperPickup
+    - KeeperSweeper
+    - SubstitutionOn
+    - SubstitutionOff
+    - Card
+    - Smother
+
+  break_types:
+    - OffsideGiven
+    - OffsideProvoked
+    - OffsidePass
+    - Foul
+
+  opponent_pressure_types:
+    - Aerial
+    - BallTouch
+    - Challenge
+    - Clearance
+    - Tackle
+    - TakeOn
+
+  shot_feature_keywords:
+    - shot
+    - goal
+    - pass
+    - dribble
+    - aerial
+    - tackle
+    - interception
+    - clearance
+    - block
+    - loss_possession
+    - dispossessed
+    - turnover
+    - error
+    - ball_recovery
+
+  pass_feature_keywords:
+    - pass
+    - ball_touch
+    - shot
+    - goal
+    - offside
+    - foul
+    - tackle
+    - interception
+    - clearance
+    - aerial
+    - block
+    - loss_possession
+    - dispossessed
+    - turnover
+    - error
+    - ball_recovery
+
+  shot_metadata_features:
+    - sequence_id
+    - sequence_key
+    - sequence_event
+    - shot_event_idx
+
+  pass_metadata_features:
+    - sequence_id
+    - sequence_key
+    - sequence_event
+    - sequence_team_id
+    - sequence_team
+    - sequence_ending
+    - sequence_end_event_idx
+    - sequence_end_type
+    - sequence_end_outcome_type
+    - sequence_end_team_id
+    - sequence_end_team
+    - sequence_end_player_id
+    - sequence_end_player
+    - sequence_end_side

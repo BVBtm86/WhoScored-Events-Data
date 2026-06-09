@@ -24,8 +24,8 @@ class RawEvents:
         )
         self.client = MongoClient(config.mongo.url)
         self.db = self.client[config.mongo.db]
-        self.collection_schedule = self.db[config.mongo.collection['collection_schedule']]
-        self.collection_raw_events = self.db[config.mongo.collection['collection_raw_events']]
+        self.collection_schedule = self.db[config.mongo.collections['collection_schedule']]
+        self.collection_raw_events = self.db[config.mongo.collections['collection_raw_events']]
 
     def _finished_games_df(self) -> pd.DataFrame:
         docs = list(

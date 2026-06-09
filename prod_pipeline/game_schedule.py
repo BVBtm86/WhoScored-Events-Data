@@ -28,8 +28,8 @@ class GameSchedule:
 
         self.client = MongoClient(config.mongo.url)
         self.db = self.client[config.mongo.db]
-        self.collection_schedule = self.db[config.mongo.collection['collection_schedule']]
-        self.collection_teams = self.db[config.mongo.collection['collection_teams']]
+        self.collection_schedule = self.db[config.mongo.collections['collection_schedule']]
+        self.collection_teams = self.db[config.mongo.collections['collection_teams']]
 
     def _read_team_mapping(self) -> dict[int, str]:
         cursor = self.collection_teams.find(

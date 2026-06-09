@@ -20,8 +20,8 @@ class ProcessedEvents:
         self.config = config
         self.client = MongoClient(config.mongo.url)
         self.db = self.client[config.mongo.db]
-        self.collection_raw_events = self.db[config.mongo.collection['collection_raw_events']]
-        self.collection_processed_events = self.db[config.mongo.collection['collection_processed_events']]
+        self.collection_raw_events = self.db[config.mongo.collections['collection_raw_events']]
+        self.collection_processed_events = self.db[config.mongo.collections['collection_processed_events']]
 
     def _raw_game_ids(self) -> Set[int]:
         return {

@@ -21,4 +21,5 @@ venv/
 .vscode/
 
 # Folders
-mongo_backup
+mongo_backup/*
+downloaded_files/team_images/

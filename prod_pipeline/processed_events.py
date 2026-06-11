@@ -11,6 +11,7 @@ from pymongo.errors import BulkWriteError
 
 from helper import setup_logging, load_app_config, logger
 from config import ScrapeDataConfig
+from opta_qualifiers import qualifier_catalog_entry
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
@@ -69,29 +70,107 @@ class ProcessedEvents:
         return names
 
     @staticmethod
+    def _qualifier_type_id(qualifier: dict[str, Any]) -> Any:
+        qtype = qualifier.get('type') or {}
+        if isinstance(qtype, dict):
+            for key in ('value', 'id', 'qualifierId'):
+                if qtype.get(key) is not None:
+                    return qtype.get(key)
+        for key in ('qualifierId', 'id'):
+            if qualifier.get(key) is not None:
+                return qualifier.get(key)
+        return None
+
+    @staticmethod
+    def _qualifier_type_name(qualifier: dict[str, Any]) -> str | None:
+        qtype = qualifier.get('type') or {}
+        if isinstance(qtype, dict):
+            for key in ('displayName', 'name'):
+                if qtype.get(key):
+                    return str(qtype.get(key))
+        for key in ('displayName', 'name'):
+            if qualifier.get(key):
+                return str(qualifier.get(key))
+        return None
+
+    @staticmethod
+    def _normalize_qualifier_id(value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return None
+
+    @staticmethod
+    def _build_qidset(qualifiers: Any) -> set[int]:
+        ids: set[int] = set()
+        for q in ProcessedEvents._coerce_qualifiers(qualifiers):
+            qualifier_id = ProcessedEvents._normalize_qualifier_id(ProcessedEvents._qualifier_type_id(q))
+            if qualifier_id is not None:
+                ids.add(qualifier_id)
+        return ids
+
+    @staticmethod
     def _build_qmap(qualifiers: Any) -> dict[str, Any]:
         qmap: dict[str, Any] = {}
         for q in ProcessedEvents._coerce_qualifiers(qualifiers):
-            qtype = q.get('type') or {}
-            display_name = qtype.get('displayName') if isinstance(qtype, dict) else None
+            display_name = ProcessedEvents._qualifier_type_name(q)
             if display_name:
                 qmap[display_name] = q.get('value')
         return qmap
+
+    @staticmethod
+    def _build_qualifier_details(qualifiers: Any) -> list[dict[str, Any]]:
+        details: list[dict[str, Any]] = []
+        for q in ProcessedEvents._coerce_qualifiers(qualifiers):
+            qualifier_id = ProcessedEvents._normalize_qualifier_id(ProcessedEvents._qualifier_type_id(q))
+            raw_name = ProcessedEvents._qualifier_type_name(q)
+            catalog = qualifier_catalog_entry(qualifier_id, raw_name)
+            details.append({
+                'id': qualifier_id,
+                'raw_name': raw_name,
+                'name': catalog.get('name') if catalog else raw_name,
+                'category': catalog.get('category') if catalog else None,
+                'value': q.get('value'),
+                'known': catalog is not None,
+            })
+        return details
 
     @staticmethod
     def _ensure_qual_cols(df: pd.DataFrame) -> pd.DataFrame:
         df = df.copy()
         if 'qualifiers' in df.columns:
             df['qset'] = df['qualifiers'].apply(ProcessedEvents._build_qset)
+            df['qidset'] = df['qualifiers'].apply(ProcessedEvents._build_qidset)
             df['qmap'] = df['qualifiers'].apply(ProcessedEvents._build_qmap)
+            df['qualifier_details'] = df['qualifiers'].apply(ProcessedEvents._build_qualifier_details)
+            df['qualifier_ids'] = df['qualifier_details'].apply(
+                lambda values: [q['id'] for q in values if q.get('id') is not None]
+            )
+            df['qualifier_names'] = df['qualifier_details'].apply(
+                lambda values: [q['name'] for q in values if q.get('name')]
+            )
+            df['qualifier_categories'] = df['qualifier_details'].apply(
+                lambda values: sorted({q['category'] for q in values if q.get('category')})
+            )
         elif 'qualifier_names' in df.columns:
             df['qset'] = df['qualifier_names'].apply(
                 lambda x: set(x) if isinstance(x, list) else set()
             )
+            df['qidset'] = [set() for _ in range(len(df))]
             df['qmap'] = [{} for _ in range(len(df))]
+            df['qualifier_details'] = [[] for _ in range(len(df))]
+            df['qualifier_ids'] = [[] for _ in range(len(df))]
+            df['qualifier_categories'] = [[] for _ in range(len(df))]
         else:
             df['qset'] = [set() for _ in range(len(df))]
+            df['qidset'] = [set() for _ in range(len(df))]
             df['qmap'] = [{} for _ in range(len(df))]
+            df['qualifier_details'] = [[] for _ in range(len(df))]
+            df['qualifier_ids'] = [[] for _ in range(len(df))]
+            df['qualifier_names'] = [[] for _ in range(len(df))]
+            df['qualifier_categories'] = [[] for _ in range(len(df))]
         return df
 
     @staticmethod
@@ -101,6 +180,10 @@ class ProcessedEvents:
     @staticmethod
     def _has_any(df: pd.DataFrame, qualifiers: set[str]) -> pd.Series:
         return df['qset'].apply(lambda values: bool(values & qualifiers))
+
+    @staticmethod
+    def _has_id(df: pd.DataFrame, qualifier_id: int) -> pd.Series:
+        return df['qidset'].apply(lambda values: qualifier_id in values)
 
     @staticmethod
     def _qvalue(qmap: dict[str, Any], key: str) -> Any:
@@ -149,6 +232,7 @@ class ProcessedEvents:
         outcome = events['outcome_type']
         has = cls._has
         has_any = cls._has_any
+        has_id = cls._has_id
 
         pass_mask = t.eq('Pass')
         shot_mask = t.isin({'Goal', 'MissedShots', 'SavedShot', 'ShotOnPost'})
@@ -167,7 +251,7 @@ class ProcessedEvents:
             'FreeKickTaken',
         }
 
-        own_goal = t.eq('Goal') & has(events, 'OwnGoal')
+        own_goal = t.eq('Goal') & (has(events, 'OwnGoal') | has_id(events, 28))
         shot_blocked = t.eq('SavedShot') & has(events, 'Blocked')
         shot_woodwork = t.eq('ShotOnPost') & ~own_goal
         shot_goal = t.eq('Goal') & ~own_goal
@@ -185,7 +269,7 @@ class ProcessedEvents:
             default='Unknown',
         )
         events.loc[~shot_mask, 'shot_zone'] = None
-        shot_penalty = shot_mask & has(events, 'Penalty') & ~own_goal
+        shot_penalty = shot_mask & (has(events, 'Penalty') | has_id(events, 108)) & ~own_goal
         shot_fastbreak = shot_mask & has(events, 'FastBreak') & ~own_goal
         shot_set_piece = shot_mask & has_any(events, set_piece_quals) & ~shot_penalty & ~own_goal
         shot_open_play = shot_mask & has(events, 'RegularPlay') & ~shot_penalty & ~shot_fastbreak & ~shot_set_piece & ~own_goal
@@ -196,7 +280,11 @@ class ProcessedEvents:
         )
         events.loc[~shot_mask, 'shot_situation'] = None
         events['shot_body_part'] = np.select(
-            [has(events, 'RightFoot'), has(events, 'LeftFoot'), has(events, 'Head')],
+            [
+                has(events, 'RightFoot') | has_id(events, 56),
+                has(events, 'LeftFoot') | has_id(events, 72),
+                has(events, 'Head') | has_id(events, 15),
+            ],
             ['Right foot', 'Left foot', 'Head'],
             default='Other body parts',
         )
@@ -220,14 +308,14 @@ class ProcessedEvents:
         target_zone_2 = 200 / 3
         freekick_quals = {'FreekickTaken', 'FreeKickTaken', 'IndirectFreekickTaken', 'IndirectFreeKickTaken'}
         long_excluded_type = has_any(events, {'Cross', 'KeyPass', 'Throughball'})
-        pass_long = pass_mask & has(events, 'Longball') & ~long_excluded_type
+        pass_long = pass_mask & (has(events, 'Longball') | has_id(events, 1)) & ~long_excluded_type
 
         events['pass_successful'] = (pass_mask & outcome.eq('Successful')).astype(int)
         events['pass_length'] = np.where(pass_long, 'Long', 'Short')
         events.loc[~pass_mask, 'pass_length'] = None
         events['pass_height'] = np.where(has(events, 'Chipped'), 'Chipped', 'Ground')
         events.loc[~pass_mask, 'pass_height'] = None
-        events['pass_body_part'] = np.where(has(events, 'HeadPass'), 'Head', 'Feet')
+        events['pass_body_part'] = np.where(has(events, 'HeadPass') | has_id(events, 3), 'Head', 'Feet')
         events.loc[~pass_mask, 'pass_body_part'] = None
         events['pass_target_zone'] = np.select(
             [pex < target_zone_1, (pex >= target_zone_1) & (pex < target_zone_2), pex >= target_zone_2],
@@ -239,12 +327,18 @@ class ProcessedEvents:
         events['pass_backward'] = (pass_mask & pdx.lt(0)).astype(int)
         events['pass_left'] = (pass_mask & pdy.gt(0)).astype(int)
         events['pass_right'] = (pass_mask & pdy.lt(0)).astype(int)
-        events['pass_cross'] = (pass_mask & has(events, 'Cross')).astype(int)
-        events['pass_freekick'] = (pass_mask & has_any(events, freekick_quals) & ~has(events, 'Cross')).astype(int)
-        events['pass_corner'] = (pass_mask & has(events, 'CornerTaken')).astype(int)
-        events['pass_through_ball'] = (pass_mask & has(events, 'Throughball')).astype(int)
-        events['pass_throw_in'] = (pass_mask & has(events, 'ThrowIn')).astype(int)
-        events['pass_key_pass_qualifier'] = (pass_mask & has(events, 'KeyPass')).astype(int)
+        events['pass_cross'] = (pass_mask & (has(events, 'Cross') | has_id(events, 2))).astype(int)
+        events['pass_freekick'] = (
+            pass_mask
+            & (has_any(events, freekick_quals) | has_id(events, 5))
+            & ~(has(events, 'Cross') | has_id(events, 2))
+        ).astype(int)
+        events['pass_corner'] = (pass_mask & (has(events, 'CornerTaken') | has_id(events, 6))).astype(int)
+        events['pass_through_ball'] = (pass_mask & (has(events, 'Throughball') | has_id(events, 4))).astype(int)
+        events['pass_throw_in'] = (pass_mask & (has(events, 'ThrowIn') | has_id(events, 107))).astype(int)
+        events['pass_key_pass_qualifier'] = (
+            pass_mask & (has(events, 'KeyPass') | has_id(events, 24) | has_id(events, 210))
+        ).astype(int)
         events['shot_assisted_key_pass'] = (shot_mask & has(events, 'Assisted')).astype(int)
 
         events['tackle_result'] = np.select(
@@ -252,7 +346,7 @@ class ProcessedEvents:
             ['Gained Possession', 'Did Not Get Possession', 'Was Dribbled'],
             default=None,
         )
-        outfielder_block = t.eq('Save') & has(events, 'OutfielderBlock')
+        outfielder_block = t.eq('Save') & (has(events, 'OutfielderBlock') | has_id(events, 94))
         blocked_cross = t.eq('BlockedPass') | (t.eq('Clearance') & has(events, 'BlockedCross'))
         blocked_shot = t.eq('Block') | outfielder_block
         block_mask = blocked_cross | blocked_shot
@@ -304,7 +398,11 @@ class ProcessedEvents:
             default=None,
         )
         events['card_type'] = np.select(
-            [has(events, 'SecondYellow'), has(events, 'Yellow'), has(events, 'Red')],
+            [
+                has(events, 'SecondYellow') | has_id(events, 31) | has_id(events, 32),
+                has(events, 'Yellow'),
+                has(events, 'Red') | has_id(events, 33),
+            ],
             ['Second Yellow', 'Yellow', 'Red'],
             default=None,
         )
@@ -323,8 +421,8 @@ class ProcessedEvents:
         events['is_pass_short'] = (pass_mask & ~pass_long).astype(int)
         events['is_pass_chipped'] = (pass_mask & has(events, 'Chipped')).astype(int)
         events['is_pass_ground'] = (pass_mask & ~has(events, 'Chipped')).astype(int)
-        events['is_pass_head'] = (pass_mask & has(events, 'HeadPass')).astype(int)
-        events['is_pass_feet'] = (pass_mask & ~has(events, 'HeadPass')).astype(int)
+        events['is_pass_head'] = (pass_mask & (has(events, 'HeadPass') | has_id(events, 3))).astype(int)
+        events['is_pass_feet'] = (pass_mask & ~(has(events, 'HeadPass') | has_id(events, 3))).astype(int)
         events['is_pass_forward'] = events['pass_forward']
         events['is_pass_backward'] = events['pass_backward']
         events['is_pass_left'] = events['pass_left']
@@ -411,7 +509,7 @@ class ProcessedEvents:
         relevant_mask = events['stat_event_type'].notna() | events['is_touch'].eq(1) | events['is_key_pass'].eq(1)
         processed_events = events.loc[relevant_mask].reset_index(drop=True).copy()
 
-        drop_cols = ['_id', 'qualifiers', 'qualifier_names', 'qset', 'qmap', 'qsp', 'qst', 'qmpa']
+        drop_cols = ['_id', 'qualifiers', 'qset', 'qidset', 'qmap', 'qsp', 'qst', 'qmpa']
         processed_events = processed_events.drop(columns=[c for c in drop_cols if c in processed_events.columns])
 
         def as_bool(source_col: str) -> pd.Series:
@@ -526,7 +624,9 @@ class ProcessedEvents:
             'event_idx', 'period', 'minute', 'second', 'expanded_minute',
             'team_id', 'team', 'player_id', 'player', 'type', 'outcome_type',
             'x', 'y', 'end_x', 'end_y', 'goal_mouth_y', 'goal_mouth_z', 'blocked_x', 'blocked_y',
-            'related_event_id', 'related_player_id', 'stat_event_type',
+            'related_event_id', 'related_player_id',
+            'qualifier_ids', 'qualifier_names', 'qualifier_categories', 'qualifier_details',
+            'stat_event_type',
             'shot_event', 'pass_event', 'pass_completed', 'dribble_event', 'tackle_attempted_event',
             'interception_event', 'clearance_event', 'block_event',
             'offside_event', 'foul_event', 'aerial_duel_event', 'touch_event', 'loss_possession_event',

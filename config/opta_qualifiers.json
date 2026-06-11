@@ -1,0 +1,82 @@
+{
+  "provider": "opta",
+  "title": "Opta Qualifier IDs",
+  "description": "Qualifiers add context to events. Each event has a qualifier array where each entry has a numeric qualifierId and optional value.",
+  "notes": [
+    "Qualifier 213 is defined in the F24 spec as expectedGoals but is not populated in the theanalyst.com feed.",
+    "Use qualifiers 321 and 322 from the separate matchexpectedgoals endpoint for xG and xGOT."
+  ],
+  "categories": {
+    "pass": [
+      { "id": 1, "name": "longBall", "notes": "Long pass" },
+      { "id": 2, "name": "cross", "notes": "Cross" },
+      { "id": 3, "name": "headPass", "notes": "Headed pass" },
+      { "id": 4, "name": "throughBall", "notes": "Through ball" },
+      { "id": 5, "name": "freeKickTaken", "notes": "Free kick pass" },
+      { "id": 6, "name": "cornerTaken", "notes": "Corner kick" },
+      { "id": 7, "name": "goalKick", "notes": "Goal kick" },
+      { "id": 107, "name": "throwIn", "notes": "Throw-in" },
+      { "id": 24, "name": "assistedShot", "notes": "Pass led to a shot" },
+      { "id": 210, "name": "intentionalAssist", "notes": "Pass led to a goal" },
+      { "id": 196, "name": "switchOfPlay", "notes": "Pass crossing centre zone, y-distance > 60" }
+    ],
+    "location": [
+      { "id": 140, "name": "passEndX", "valueType": "number (0-100)", "notes": "Pass destination X coordinate" },
+      { "id": 141, "name": "passEndY", "valueType": "number (0-100)", "notes": "Pass destination Y coordinate" },
+      { "id": 20, "name": "involvedPlayer", "valueType": "player ID", "notes": "Other player involved in the event" }
+    ],
+    "shot": [
+      { "id": 15, "name": "head", "notes": "Headed shot/goal" },
+      { "id": 56, "name": "rightFoot", "notes": "Right-footed action" },
+      { "id": 72, "name": "leftFoot", "notes": "Left-footed action" },
+      { "id": 22, "name": "otherBodyPart", "notes": "Knee, chest, etc." },
+      { "id": 76, "name": "bigChance", "notes": "Big chance (high xG situation)" },
+      { "id": 108, "name": "penalty", "notes": "Penalty kick" },
+      { "id": 136, "name": "directFK", "notes": "Direct free kick goal" },
+      { "id": 154, "name": "volley", "notes": "Volley" },
+      { "id": 328, "name": "strong", "notes": "Powerful shot" },
+      { "id": 17, "name": "blockX", "notes": "Block x-coordinate" },
+      { "id": 18, "name": "blockY", "notes": "Block y-coordinate" }
+    ],
+    "goal": [
+      { "id": 28, "name": "ownGoal", "notes": "Own goal. contestantId is the team that scored it; credit opposing team." },
+      { "id": 8, "name": "goalDisallowed", "notes": "Goal ruled out (offside/foul)" },
+      { "id": 102, "name": "goalMouthY", "notes": "Y coordinate in goal mouth (45.2-54.8 range)" },
+      { "id": 103, "name": "goalMouthZ", "notes": "Z coordinate / height in goal mouth (0-38 range)" }
+    ],
+    "xg": [
+      { "id": 321, "name": "expectedGoals", "notes": "xG value on matchexpectedgoals endpoint only, not on standard matchevent" },
+      { "id": 322, "name": "expectedGoalsOnTarget", "notes": "xGOT value on matchexpectedgoals endpoint only" }
+    ],
+    "context": [
+      { "id": 130, "name": "teamFormation", "notes": "Formation ID on lineup events" },
+      { "id": 131, "name": "teamPlayerFormation", "notes": "Player positions 1-11 on lineup events" },
+      { "id": 145, "name": "formationSlot", "notes": "Formation position of player coming on (1-11)" },
+      { "id": 214, "name": "length", "notes": "Estimated metres ball travelled" },
+      { "id": 292, "name": "detailedPositionId", "notes": "Granular position on sub-on events (1-10)" }
+    ],
+    "card": [
+      { "id": 31, "name": "secondYellow", "notes": "Is this a second yellow?" },
+      { "id": 32, "name": "secondYellowCard", "notes": "Second yellow card flag" },
+      { "id": 33, "name": "redCard", "notes": "Straight red card" }
+    ],
+    "shotPosition": [
+      { "id": 395, "name": "shotStartX", "notes": "X coordinate of shot origin (0-100)" },
+      { "id": 396, "name": "shotStartY", "notes": "Y coordinate of shot origin (0-100)" },
+      { "id": 230, "name": "shotEndX", "notes": "X coordinate where shot crossed goal plane" },
+      { "id": 231, "name": "shotEndY", "notes": "Y coordinate where shot crossed goal plane" }
+    ],
+    "referencedOnly": [
+      { "id": 94, "name": "unknown", "notes": "Referenced in event-types docs: Save events can also be outfield with qualifier 94. The packaged docs do not provide a full qualifier-table definition." },
+      { "id": 213, "name": "expectedGoals", "notes": "Defined in the F24 spec as expectedGoals, but not populated in the theanalyst.com matchevent feed. Use 321/322 from matchexpectedgoals instead." }
+    ]
+  },
+  "goalMouthZones": [
+    { "zone": "Low left", "goalMouthY": "51.8-54.8", "goalMouthZ": "0-20" },
+    { "zone": "Low centre", "goalMouthY": "48.2-51.8", "goalMouthZ": "0-20" },
+    { "zone": "Low right", "goalMouthY": "45.2-48.2", "goalMouthZ": "0-20" },
+    { "zone": "High left", "goalMouthY": "51.8-54.8", "goalMouthZ": "20-38" },
+    { "zone": "High centre", "goalMouthY": "48.2-51.8", "goalMouthZ": "20-38" },
+    { "zone": "High right", "goalMouthY": "45.2-48.2", "goalMouthZ": "20-38" }
+  ]
+}

@@ -363,6 +363,10 @@ game_stats:
     - end_y
     - type
     - outcome_type
+    - qualifier_ids
+    - qualifier_names
+    - qualifier_categories
+    - qualifier_details
 
 sequence_data:
   base_features:
@@ -391,6 +395,10 @@ sequence_data:
     - end_y
     - type
     - outcome_type
+    - qualifier_ids
+    - qualifier_names
+    - qualifier_categories
+    - qualifier_details
 
   sequence_action_types:
     - Pass

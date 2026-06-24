@@ -52,7 +52,7 @@ class GameSchedule:
 
         df["fbref_date"] = pd.to_datetime(df["date"]).dt.date
 
-        return df[["week", "fbref_date", "home_team", "away_team"]].rename(
+        return df[["week", "fbref_date", "home_team", "away_team", "referee", "attendance", "venue"]].rename(
             columns={
                 "home_team": "fbref_home_team",
                 "away_team": "fbref_away_team",
@@ -124,6 +124,9 @@ class GameSchedule:
                 'away_team_id': row.get('away_team_id'),
                 'away_team_name': row.get('away_team'),
                 'game_status': 'finished',
+                'referee': row.get('referee'),
+                'attendance': row.get('attendance'),
+                'venue': row.get('venue')
             })
         return docs
 

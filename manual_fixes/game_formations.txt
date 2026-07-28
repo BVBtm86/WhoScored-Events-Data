@@ -1,0 +1,129 @@
+
+##### 834845
+{
+  "team_id": 36,
+  "game_id": 834845,
+  "season": "2014-2015",
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "formation": "4-2-3-1",
+  "game_date": {
+    "$date": "2015-05-02T17:30:00.000Z"
+  },
+  "game_venue": "home",
+  "is_new_pattern": false,
+  "opponent_formation": "3-4-2-1",
+  "opponent_positions": "GK-DC-DC-DC-MR-MC-MC-ML-AMC-AMC-FW",
+  "opponent_team_id": 37,
+  "opponent_team_name": "Bayern Munich",
+  "positions": "GK-DR-DC-DC-DL-DMC-DMC-AMR-AMC-AML-FW",
+  "team_name": "Bayer Leverkusen",
+  "week": 31
+}
+
+{
+  "season": "2014-2015",
+  "game_id": 834845,
+  "team_id": 37,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "formation": "3-4-2-1",
+  "game_date": {
+    "$date": "2015-05-02T17:30:00.000Z"
+  },
+  "game_venue": "away",
+  "is_new_pattern": true,
+  "opponent_formation": "4-2-3-1",
+  "opponent_positions": "GK-DR-DC-DC-DL-DMC-DMC-AMR-AMC-AML-FW",
+  "opponent_team_id": 36,
+  "opponent_team_name": "Bayer Leverkusen",
+  "positions": "GK-DC-DC-DC-MR-MC-MC-ML-AMC-AMC-FW",
+  "team_name": "Bayern Munich",
+  "week": 31
+}
+
+##### 328297
+{
+  "team_id": 1211,
+  "game_id": 328297,
+  "season": "2009-2010",
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "formation": "4-3-1-2",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "home",
+  "is_new_pattern": true,
+  "opponent_formation": "4-4-2",
+  "opponent_positions": "GK-DC-DC-DL-MC-FW-FW-ML-MC-MR-DR",
+  "opponent_team_id": 38,
+  "opponent_team_name": "Hamburger SV",
+  "positions": "GK-DR-DC-DMC-ML-AMC-FW-DC-MR-DL-FW",
+  "team_name": "Hoffenheim",
+  "week": 32
+}
+
+{
+  "season": "2009-2010",
+  "game_id": 328297,
+  "team_id": 38,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "formation": "4-4-2",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "away",
+  "is_new_pattern": true,
+  "opponent_formation": "4-3-1-2",
+  "opponent_positions": "GK-DR-DC-DMC-ML-AMC-FW-DC-MR-DL-FW",
+  "opponent_team_id": 1211,
+  "opponent_team_name": "Hoffenheim",
+  "positions": "GK-DC-DC-DL-MC-FW-FW-ML-MC-MR-DR",
+  "team_name": "Hamburger SV",
+  "week": 32
+}
+
+##### 328044
+{
+  "season": "2009-2010",
+  "game_id": 328044,
+  "team_id": 36,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "formation": "4-3-1-2",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "is_new_pattern": true,
+  "opponent_formation": "4-4-2",
+  "opponent_positions": "GK-DR-MC-DC-FW-MC-DC-ML-DL-MR-FW",
+  "opponent_team_id": 42,
+  "opponent_team_name": "Werder Bremen",
+  "positions": "GK-DC-DC-MR-FW-DR-ML-AMC-DMC-DL-FW",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "team_id": 42,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "formation": "4-4-2",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "is_new_pattern": true,
+  "opponent_formation": "4-3-1-2",
+  "opponent_positions": "GK-DC-DC-MR-FW-DR-ML-AMC-DMC-DL-FW",
+  "opponent_team_id": 36,
+  "opponent_team_name": "Bayer Leverkusen",
+  "positions": "GK-DR-MC-DC-FW-MC-DC-ML-DL-MR-FW",
+  "team_name": "Werder Bremen",
+  "week": 6
+}

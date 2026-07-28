@@ -8,8 +8,8 @@ import pandas as pd
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
 
-from config import ScrapeDataConfig
-from helper import load_app_config, logger, setup_logging
+from prod_pipeline.config import ScrapeDataConfig
+from prod_pipeline.helper import load_app_config, logger, setup_logging
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
@@ -35,6 +35,9 @@ class SequenceData:
         self.pass_feature_keywords = sequence_config.pass_feature_keywords
         self.shot_metadata_features = sequence_config.shot_metadata_features
         self.pass_metadata_features = sequence_config.pass_metadata_features
+        self.shared_excluded_features = set(sequence_config.shared_excluded_features)
+        self.shot_excluded_features = set(sequence_config.shot_excluded_features)
+        self.pass_excluded_features = set(sequence_config.pass_excluded_features)
 
     def _processed_game_ids(self) -> Set[int]:
         return {
@@ -93,18 +96,102 @@ class SequenceData:
         )
         return pd.DataFrame(docs)
 
+    @staticmethod
+    def _matches_keyword(column: str, keyword: str) -> bool:
+        return (
+            column == keyword
+            or column.startswith(f'{keyword}_')
+            or column.endswith(f'_{keyword}')
+            or f'_{keyword}_' in column
+        )
+
     def _feature_columns(
         self,
         sequences_df: pd.DataFrame,
         feature_keywords: list[str],
         metadata_features: list[str],
+        excluded_features: set[str],
     ) -> list[str]:
         final_features = list(self.base_features)
         for keyword in feature_keywords:
-            final_features.extend([feature for feature in sequences_df.columns if keyword in feature])
+            final_features.extend(
+                [feature for feature in sequences_df.columns if self._matches_keyword(feature, keyword)]
+            )
         final_features.extend(metadata_features)
         final_features = list(dict.fromkeys(final_features))
-        return [col for col in final_features if col in sequences_df.columns]
+        blocked = self.shared_excluded_features | excluded_features
+        return [col for col in final_features if col in sequences_df.columns and col not in blocked]
+
+    @staticmethod
+    def _system_sequence_ending(current_period: Optional[str]) -> str:
+        return 'End of Period' if current_period == 'FirstHalf' else 'End of Game'
+
+    def _sequence_start_reason(
+        self,
+        start_event: Optional[pd.Series],
+        sequence_team_id: int,
+        current_period: Optional[str],
+    ) -> str:
+        if start_event is None:
+            return 'Start of Period' if current_period == 'FirstHalf' else 'Start of Game'
+
+        event_type = start_event.get('type')
+        outcome = start_event.get('outcome_type')
+        event_team_id = start_event.get('team_id')
+
+        if start_event.get('period') != current_period:
+            return 'Start of Period'
+
+        if event_type in {'SubstitutionOn', 'SubstitutionOff', 'Card'}:
+            return 'After Stoppage'
+
+        if event_type in {'Save', 'Claim', 'Punch', 'Smother', 'KeeperPickup', 'KeeperSweeper'}:
+            return 'Goalkeeper Restart'
+
+        if event_type in self.shot_types:
+            return 'After Shot'
+
+        if event_type in {'Foul', 'OffsideGiven', 'OffsideProvoked', 'OffsidePass'}:
+            return 'After Stoppage'
+
+        if event_team_id != sequence_team_id:
+            if event_type in {'Dispossessed', 'Turnover', 'Error'}:
+                return 'Opponent Error'
+            if outcome == 'Unsuccessful':
+                return 'Won Possession'
+            return 'After Opponent Action'
+
+        if event_type in {'Pass', 'BallTouch'} and outcome != 'Successful':
+            return 'After Unsuccessful Pass'
+
+        if event_type in {'Dispossessed', 'Turnover', 'Error'}:
+            return 'After Turnover'
+
+        return f'After {event_type}' if event_type else 'Sequence Start'
+
+    @staticmethod
+    def _event_metadata(event: Optional[pd.Series], prefix: str) -> Dict[str, Any]:
+        fields = {
+            f'{prefix}_event_idx': None,
+            f'{prefix}_type': None,
+            f'{prefix}_outcome_type': None,
+            f'{prefix}_team_id': None,
+            f'{prefix}_team': None,
+            f'{prefix}_player_id': None,
+            f'{prefix}_player': None,
+        }
+        if event is None:
+            return fields
+
+        return {
+            f'{prefix}_event_idx': event.get('event_idx'),
+            f'{prefix}_type': event.get('type'),
+            f'{prefix}_outcome_type': event.get('outcome_type'),
+            f'{prefix}_team_id': event.get('team_id'),
+            f'{prefix}_team': event.get('team'),
+            f'{prefix}_player_id': event.get('player_id'),
+            f'{prefix}_player': event.get('player'),
+        }
 
     def _shooting_valid_sequence_event(
         self,
@@ -130,7 +217,7 @@ class SequenceData:
         if not same_team:
             if event_type == 'Error':
                 return 'keep'
-            if event_type in self.opponent_pressure_types and outcome == 'Unsuccessful':
+            if outcome == 'Unsuccessful':
                 return 'keep'
             return 'break'
 
@@ -154,6 +241,7 @@ class SequenceData:
         shooting_team_id = game_data.loc[shot_index, 'team_id']
         current_period = game_data.loc[shot_index, 'period']
         sequence_rows = [game_data.loc[shot_index]]
+        start_event = None
         j = shot_index - 1
 
         while j >= 0:
@@ -170,6 +258,7 @@ class SequenceData:
                 continue
 
             if decision == 'break':
+                start_event = event
                 break
 
         sequence_df = pd.DataFrame(sequence_rows).sort_index()
@@ -177,6 +266,14 @@ class SequenceData:
         sequence_df['sequence_key'] = str(game_data.loc[shot_index, 'game_id']) + '_' + str(sequence_id)
         sequence_df['sequence_event'] = range(1, len(sequence_df) + 1)
         sequence_df['shot_event_idx'] = game_data.loc[shot_index, 'event_idx']
+        sequence_df['sequence_start_reason'] = self._sequence_start_reason(
+            start_event,
+            shooting_team_id,
+            current_period,
+        )
+        sequence_df = sequence_df.assign(**self._event_metadata(start_event, 'sequence_start'))
+        sequence_df = sequence_df.assign(**self._event_metadata(game_data.loc[shot_index], 'sequence_end'))
+        sequence_df['sequence_end_side'] = 'same_team'
 
         return sequence_df
 
@@ -206,6 +303,7 @@ class SequenceData:
                 sequences_df,
                 self.shot_feature_keywords,
                 self.shot_metadata_features,
+                self.shot_excluded_features,
             )
         ].reset_index(drop=True)
 
@@ -233,9 +331,9 @@ class SequenceData:
             return 'keep_break' if same_team else 'break'
 
         if not same_team:
-            if event_type in self.opponent_pressure_types and outcome == 'Unsuccessful':
-                return 'keep'
             if event_type == 'Error':
+                return 'keep'
+            if outcome == 'Unsuccessful':
                 return 'keep'
             if event_type == 'Pass':
                 return 'break'
@@ -248,7 +346,7 @@ class SequenceData:
             return 'keep_break'
 
         if event_type in self.shot_types:
-            return 'keep_break'
+            return 'break'
 
         if event_type in self.break_types:
             return 'keep_break'
@@ -272,7 +370,10 @@ class SequenceData:
         same_team = event['team_id'] == current_team_id
 
         if event.get('period') != current_period:
-            return 'End of First Half' if current_period == 'FirstHalf' else 'End of Game'
+            return self._system_sequence_ending(current_period)
+
+        if event_type in self.ignore_types:
+            return self._system_sequence_ending(current_period)
 
         if same_team and event_type == 'Goal':
             return 'Goal'
@@ -296,53 +397,46 @@ class SequenceData:
 
         return event_type
 
-    @staticmethod
     def _add_passing_sequence_end_metadata(
+        self,
         current_rows: list[pd.Series],
+        start_event: Optional[pd.Series],
         current_team_id: int,
         event: pd.Series,
         sequence_ending: str,
         period_changed: bool = False,
     ) -> list[pd.Series]:
         sequence_team = current_rows[0].get('team')
-        opponent_pass_end = (
-            not period_changed
-            and event.get('team_id') != current_team_id
-            and event.get('type') in {'Pass', 'OffsidePass'}
-        )
+        if sequence_ending == 'Loss Possession':
+            same_team_rows = [row for row in current_rows if row.get('team_id') == current_team_id]
+            sequence_end_event = same_team_rows[-1] if same_team_rows else current_rows[-1]
+        else:
+            sequence_end_event = event
 
         for row in current_rows:
+            row['sequence_start_reason'] = self._sequence_start_reason(
+                start_event,
+                current_team_id,
+                row.get('period'),
+            )
+            for key, value in SequenceData._event_metadata(start_event, 'sequence_start').items():
+                row[key] = value
             row['sequence_team_id'] = current_team_id
             row['sequence_team'] = sequence_team
             row['sequence_ending'] = sequence_ending
 
             if period_changed:
-                row['sequence_end_event_idx'] = None
-                row['sequence_end_type'] = None
-                row['sequence_end_outcome_type'] = None
-                row['sequence_end_team_id'] = None
-                row['sequence_end_team'] = None
-                row['sequence_end_player_id'] = None
-                row['sequence_end_player'] = None
+                for key, value in SequenceData._event_metadata(None, 'sequence_end').items():
+                    row[key] = value
                 row['sequence_end_side'] = 'system'
-            elif opponent_pass_end:
-                row['sequence_end_event_idx'] = None
-                row['sequence_end_type'] = None
-                row['sequence_end_outcome_type'] = None
-                row['sequence_end_team_id'] = event.get('team_id')
-                row['sequence_end_team'] = event.get('team')
-                row['sequence_end_player_id'] = None
-                row['sequence_end_player'] = None
-                row['sequence_end_side'] = 'opponent'
             else:
-                row['sequence_end_event_idx'] = event.get('event_idx')
-                row['sequence_end_type'] = event.get('type')
-                row['sequence_end_outcome_type'] = event.get('outcome_type')
-                row['sequence_end_team_id'] = event.get('team_id')
-                row['sequence_end_team'] = event.get('team')
-                row['sequence_end_player_id'] = event.get('player_id')
-                row['sequence_end_player'] = event.get('player')
-                row['sequence_end_side'] = 'same_team' if event.get('team_id') == current_team_id else 'opponent'
+                for key, value in SequenceData._event_metadata(sequence_end_event, 'sequence_end').items():
+                    row[key] = value
+                row['sequence_end_side'] = (
+                    'same_team'
+                    if sequence_ending == 'Loss Possession' or event.get('team_id') == current_team_id
+                    else 'opponent'
+                )
 
         return current_rows
 
@@ -356,9 +450,10 @@ class SequenceData:
         current_rows: list[pd.Series] = []
         current_team_id = None
         current_period = None
+        current_start_event = None
         sequence_id = 1
 
-        for _, event in game_data.iterrows():
+        for idx, event in game_data.iterrows():
             event_type = event['type']
             outcome = event.get('outcome_type')
 
@@ -366,6 +461,7 @@ class SequenceData:
                 if event_type == 'Pass' and outcome == 'Successful':
                     current_team_id = event['team_id']
                     current_period = event['period']
+                    current_start_event = game_data.loc[idx - 1] if idx > 0 else None
 
                     row = event.copy()
                     row['sequence_id'] = sequence_id
@@ -381,13 +477,10 @@ class SequenceData:
                 continue
 
             if pass_decision == 'keep_break':
-                row = event.copy()
-                row['sequence_id'] = sequence_id
-                current_rows.append(row)
-
                 sequence_ending = self._passing_sequence_ending(event, current_team_id, current_period)
                 current_rows = self._add_passing_sequence_end_metadata(
                     current_rows=current_rows,
+                    start_event=current_start_event,
                     current_team_id=current_team_id,
                     event=event,
                     sequence_ending=sequence_ending,
@@ -398,6 +491,7 @@ class SequenceData:
                 current_rows = []
                 current_team_id = None
                 current_period = None
+                current_start_event = None
                 continue
 
             if pass_decision == 'ignore':
@@ -409,6 +503,7 @@ class SequenceData:
 
                 current_rows = self._add_passing_sequence_end_metadata(
                     current_rows=current_rows,
+                    start_event=current_start_event,
                     current_team_id=current_team_id,
                     event=event,
                     sequence_ending=sequence_ending,
@@ -420,19 +515,28 @@ class SequenceData:
                 current_rows = []
                 current_team_id = None
                 current_period = None
+                current_start_event = None
 
                 if event_type == 'Pass' and outcome == 'Successful':
                     current_team_id = event['team_id']
                     current_period = event['period']
+                    current_start_event = game_data.loc[idx - 1] if idx > 0 else None
 
                     row = event.copy()
                     row['sequence_id'] = sequence_id
                     current_rows = [row]
 
         if current_rows:
-            sequence_ending = 'End of First Half' if current_period == 'FirstHalf' else 'End of Game'
+            sequence_ending = self._system_sequence_ending(current_period)
 
             for row in current_rows:
+                row['sequence_start_reason'] = self._sequence_start_reason(
+                    current_start_event,
+                    current_team_id,
+                    row.get('period'),
+                )
+                for key, value in self._event_metadata(current_start_event, 'sequence_start').items():
+                    row[key] = value
                 row['sequence_team_id'] = current_team_id
                 row['sequence_team'] = current_rows[0].get('team')
                 row['sequence_ending'] = sequence_ending
@@ -461,6 +565,7 @@ class SequenceData:
                 sequences_df,
                 self.pass_feature_keywords,
                 self.pass_metadata_features,
+                self.pass_excluded_features,
             )
         ].reset_index(drop=True)
 

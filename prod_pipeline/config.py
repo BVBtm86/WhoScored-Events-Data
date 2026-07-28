@@ -13,6 +13,7 @@ class MongoConfig(BaseModel):
 
 class SeasonConfig(BaseModel):
     year: str
+    year_short: str
     league: str
     name: str
     country: str
@@ -29,6 +30,7 @@ class EmailConfig(BaseModel):
 class ScheduleGamesConfig(BaseModel):
     finished_status_code: int
     required_columns: list[str]
+    match_stats_info: list[str]
 
 class GameStatsConfig(BaseModel):
     team_match_features: list[str]
@@ -50,11 +52,17 @@ class SequenceDataConfig(BaseModel):
     pass_feature_keywords: list[str]
     shot_metadata_features: list[str]
     pass_metadata_features: list[str]
+    shared_excluded_features: list[str] = []
+    shot_excluded_features: list[str] = []
+    pass_excluded_features: list[str] = []
 
 class ScrapeDataConfig(BaseModel):
     mongo: MongoConfig
     season: SeasonConfig
     email: EmailConfig
     schedule_games: ScheduleGamesConfig
+    game_lineups: list[str]
+    game_formations: list[str]
+    formation_mapping: Dict[str, str] = {}
     game_stats: GameStatsConfig
     sequence_data: SequenceDataConfig

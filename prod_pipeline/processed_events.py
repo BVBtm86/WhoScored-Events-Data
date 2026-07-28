@@ -9,9 +9,9 @@ import pandas as pd
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
 
-from helper import setup_logging, load_app_config, logger
-from config import ScrapeDataConfig
-from opta_qualifiers import qualifier_catalog_entry
+from prod_pipeline.helper import setup_logging, load_app_config, logger
+from prod_pipeline.config import ScrapeDataConfig
+from prod_pipeline.opta_qualifiers import qualifier_catalog_entry
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
@@ -411,7 +411,6 @@ class ProcessedEvents:
             ['Off', 'On'],
             default=None,
         )
-
         events['is_shot'] = shot_mask.astype(int)
         events['is_pass'] = pass_mask.astype(int)
         events['is_pass_attempt'] = pass_mask.astype(int)

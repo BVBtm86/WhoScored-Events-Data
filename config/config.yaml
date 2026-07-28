@@ -6,6 +6,8 @@ mongo:
   collections:
     collection_teams: available_teams
     collection_schedule: game_schedule
+    collection_lineups: game_lineups
+    collection_formations: game_formations
     collection_logs: error_logs
     collection_raw_events: game_raw_events
     collection_processed_events: game_processed_events
@@ -15,7 +17,8 @@ mongo:
     collection_pass_sequences: game_pass_sequences
 
 season: 
-  year: "2025-2026"
+  year: "2022-2023"
+  year_short: "2223"
   league: "GER-Bundesliga"
   name: "Bundesliga"
   country: "Germany"
@@ -33,9 +36,87 @@ schedule_games:
     - start_time
     - home_team_id
     - home_team
+    - home_score
     - away_team_id
     - away_team
+    - away_score
     - week
+
+  match_stats_info:
+    - game_id
+    - home_manager
+    - away_manager
+    - referee
+    - venue
+    - attendance
+
+game_lineups:
+  - game_id
+  - game_date
+  - season
+  - week
+  - competition_name
+  - competition_country
+  - team_id
+  - team_name
+  - player_id
+  - player_name
+  - starting_lineup
+  - played
+  - minutes_played
+  - jersey_number
+  - starting_position
+  - game_venue
+
+game_formations:
+  - game_id
+  - team_id
+  - season
+  - competition_name
+  - competition_country
+  - formation
+  - game_date
+  - game_venue
+  - positions
+  - team_name
+  - week
+  - opponent_team_name
+  - opponent_team_id
+  - opponent_formation
+  - opponent_positions
+  - is_new_pattern
+
+formation_mapping:
+  "GK-DR-DC-DC-DL-DMC-DMC-AMR-AMC-AML-FW": "4-2-3-1"
+  "GK-DR-DC-DC-DL-MR-MC-MC-ML-FW-FW": "4-4-2"
+  "GK-DC-DC-DC-DMR-DML-MC-MC-AMC-AMC-FW": "3-4-2-1"
+  "GK-DR-DC-DC-DL-MC-MC-MC-FWR-FW-FWL": "4-3-3"
+  "GK-DR-DC-DC-DL-DMC-MR-MC-MC-ML-FW": "4-1-4-1"
+  "GK-DR-DC-DC-DL-DMC-MC-MC-AMC-FW-FW": "4-3-1-2"
+  "GK-DC-DC-DC-DMR-DML-MC-MC-MC-FW-FW": "3-5-2"
+  "GK-DC-DC-DC-DMC-MR-MC-MC-ML-FW-FW": "3-5-2"
+  "GK-DC-DC-DC-MR-MC-MC-ML-AMC-FW-FW": "3-4-1-2"
+  "GK-DC-DC-DC-DMR-DML-MC-MC-FWR-FW-FWL": "3-4-3"
+  "GK-DR-DC-DC-DL-MR-MC-MC-ML-AMC-FW": "4-4-1-1"
+  "GK-DR-DC-DC-DL-DMC-DMC-AMC-AMC-FW-FW": "4-2-2-2"
+  "GK-DR-DC-DC-DC-DL-MC-MC-MC-FW-FW": "5-3-2"
+  "GK-DR-DC-DC-DL-MC-MC-MC-AMC-FW-FW": "4-3-1-2"
+  "GK-DR-DC-DC-DL-DMC-MC-MC-MC-FW-FW": "4-4-2"
+  "GK-DR-DC-DC-DL-MC-MC-MC-AMC-AMC-FW": "4-3-2-1"
+  "GK-DR-DC-DC-DC-DL-MR-MC-MC-ML-FW": "5-4-1"
+  "GK-DR-DC-DC-DL-MR-MC-MC-MC-ML-FW": "4-5-1"
+  "GK-DC-DC-DC-MR-MC-MC-ML-FWR-FW-FWL": "3-4-3"
+  "GK-DC-DC-DC-DMR-DML-MC-MC-MC-AMC-FW": "3-5-1-1"
+  "GK-DC-DC-DC-DMC-MC-MC-AMC-FWR-FW-FWL": "3-3-1-3"
+  "GK-DC-DC-DC-MR-MC-MC-ML-AMC-AMC-FW": "3-4-2-1"
+  "GK-DR-DC-DC-DL-DMC-MR-MC-ML-FW-FW": "4-4-2"
+  "GK-DC-DC-DC-DMC-DMC-AMR-AMC-AMC-AML-FW": "3-2-4-1"
+  "GK-DC-DC-DC-MC-MC-MC-AMR-AMC-AML-FW": "3-3-3-1"
+  "GK-DC-DC-DC-MR-MC-MC-AMC-AMC-FW-ML": "3-4-2-1"
+  "GK-DC-DC-DL-MC-FW-FW-ML-MC-MR-DR": "4-4-2"
+  "GK-DR-DC-DMC-ML-AMC-FW-DC-MR-DL-FW": "4-1-3-2"
+  "GK-DR-MC-DC-FW-MC-DC-ML-DL-MR-FW": "4-4-2"
+  "GK-DC-DC-MR-FW-DR-ML-AMC-DMC-DL-FW": "4-1-3-2"
 
 game_stats:
   team_match_features:
@@ -393,12 +474,6 @@ sequence_data:
     - y
     - end_x
     - end_y
-    - type
-    - outcome_type
-    - qualifier_ids
-    - qualifier_names
-    - qualifier_categories
-    - qualifier_details
 
   sequence_action_types:
     - Pass
@@ -445,46 +520,44 @@ sequence_data:
     - shot
     - goal
     - pass
-    - dribble
-    - aerial
-    - tackle
-    - interception
-    - clearance
-    - block
-    - loss_possession
-    - dispossessed
-    - turnover
-    - error
-    - ball_recovery
 
   pass_feature_keywords:
     - pass
-    - ball_touch
-    - shot
-    - goal
-    - offside
-    - foul
-    - tackle
-    - interception
-    - clearance
-    - aerial
-    - block
-    - loss_possession
-    - dispossessed
-    - turnover
-    - error
-    - ball_recovery
 
   shot_metadata_features:
     - sequence_id
     - sequence_key
     - sequence_event
+    - sequence_start_reason
+    - sequence_start_event_idx
+    - sequence_start_type
+    - sequence_start_outcome_type
+    - sequence_start_team_id
+    - sequence_start_team
+    - sequence_start_player_id
+    - sequence_start_player
+    - sequence_end_event_idx
+    - sequence_end_type
+    - sequence_end_outcome_type
+    - sequence_end_team_id
+    - sequence_end_team
+    - sequence_end_player_id
+    - sequence_end_player
+    - sequence_end_side
     - shot_event_idx
 
   pass_metadata_features:
     - sequence_id
     - sequence_key
     - sequence_event
+    - sequence_start_reason
+    - sequence_start_event_idx
+    - sequence_start_type
+    - sequence_start_outcome_type
+    - sequence_start_team_id
+    - sequence_start_team
+    - sequence_start_player_id
+    - sequence_start_player
     - sequence_team_id
     - sequence_team
     - sequence_ending
@@ -496,3 +569,13 @@ sequence_data:
     - sequence_end_player_id
     - sequence_end_player
     - sequence_end_side
+
+  shared_excluded_features:
+    - shot_result
+    - shot_zone
+    - shot_situation
+    - shot_body_part
+    - pass_length
+    - pass_height
+    - pass_body_part
+    - pass_target_zone

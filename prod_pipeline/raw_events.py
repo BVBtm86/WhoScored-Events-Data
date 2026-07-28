@@ -8,8 +8,8 @@ import soccerdata as sd
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
 
-from helper import setup_logging, patch_soccerdata, load_app_config, logger
-from config import ScrapeDataConfig
+from prod_pipeline.helper import setup_logging, patch_soccerdata, load_app_config, logger
+from prod_pipeline.config import ScrapeDataConfig
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 

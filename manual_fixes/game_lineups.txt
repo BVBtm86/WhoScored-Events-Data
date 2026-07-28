@@ -1,0 +1,593 @@
+
+##### 834845
+{
+  "player_id": 132420,
+  "game_id": 834845,
+  "season": "2014-2015",
+  "team_id": 37,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2015-05-02T17:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 39,
+  "minutes_played": 93,
+  "played": false,
+  "player_name": "Rico Strieder",
+  "starting_lineup": true,
+  "starting_position": "ML",
+  "team_name": "Bayern Munich",
+  "week": 31
+}
+
+##### 328297
+{
+  "team_id": 1211,
+  "season": "2009-2010",
+  "game_id": 328297,
+  "player_id": 8035,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 23,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Sejad Salihovic",
+  "starting_lineup": true,
+  "starting_position": "ML",
+  "team_name": "Hoffenheim",
+  "week": 32
+}
+
+{
+  "player_id": 27830,
+  "game_id": 328297,
+  "season": "2009-2010",
+  "team_id": 1211,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 10,
+  "minutes_played": 46,
+  "played": true,
+  "player_name": "Carlos Eduardo",
+  "starting_lineup": true,
+  "starting_position": "AMC",
+  "team_name": "Hoffenheim",
+  "week": 32
+}
+
+{
+  "player_id": 848,
+  "game_id": 328297,
+  "season": "2009-2010",
+  "team_id": 1211,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 14,
+  "minutes_played": 65,
+  "played": true,
+  "player_name": "Josip Simunic",
+  "starting_lineup": true,
+  "starting_position": "DC",
+  "team_name": "Hoffenheim",
+  "week": 32
+}
+
+{
+  "team_id": 1211,
+  "season": "2009-2010",
+  "game_id": 328297,
+  "player_id": 8124,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 17,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Tobias Weis",
+  "starting_lineup": true,
+  "starting_position": "MR",
+  "team_name": "Hoffenheim",
+  "week": 32
+}
+
+{
+  "player_id": 19932,
+  "game_id": 328297,
+  "season": "2009-2010",
+  "team_id": 1211,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 8,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Christian Eichner",
+  "starting_lineup": true,
+  "starting_position": "DL",
+  "team_name": "Hoffenheim",
+  "week": 32
+}
+
+{
+  "team_id": 1211,
+  "season": "2009-2010",
+  "game_id": 328297,
+  "player_id": 14978,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 20,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Chinedu Obasi",
+  "starting_lineup": true,
+  "starting_position": "FW",
+  "team_name": "Hoffenheim",
+  "week": 32
+}
+
+{
+  "player_id": 15334,
+  "game_id": 328297,
+  "season": "2009-2010",
+  "team_id": 38,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 21,
+  "minutes_played": 56,
+  "played": true,
+  "player_name": "Jonathan Pitroipa",
+  "starting_lineup": true,
+  "starting_position": "ML",
+  "team_name": "Hamburger SV",
+  "week": 32
+}
+
+{
+  "team_id": 38,
+  "season": "2009-2010",
+  "game_id": 328297,
+  "player_id": 6111,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 15,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Piotr Trochowski",
+  "starting_lineup": true,
+  "starting_position": "MC",
+  "team_name": "Hamburger SV",
+  "week": 32
+}
+
+{
+  "player_id": 25435,
+  "game_id": 328297,
+  "season": "2009-2010",
+  "team_id": 38,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 13,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Robert Tesche",
+  "starting_lineup": true,
+  "starting_position": "MR",
+  "team_name": "Hamburger SV",
+  "week": 32
+}
+
+{
+  "team_id": 38,
+  "season": "2009-2010",
+  "game_id": 328297,
+  "player_id": 31991,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2010-04-25T14:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 25,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Tomás Rincón",
+  "starting_lineup": true,
+  "starting_position": "DR",
+  "team_name": "Hamburger SV",
+  "week": 32
+}
+
+##### 328044
+{
+  "player_id": 5627,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 36,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 5,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Manuel Friedrich",
+  "starting_lineup": true,
+  "starting_position": "DC",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "team_id": 36,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 8,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 4,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Sami Hyypiä",
+  "starting_lineup": true,
+  "starting_position": "DC",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "player_id": 31772,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 36,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 39,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Toni Kroos",
+  "starting_lineup": true,
+  "starting_position": "MR",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "player_id": 9719,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 36,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 7,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Tranquillo Barnetta",
+  "starting_lineup": true,
+  "starting_position": "DR",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "team_id": 36,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 25008,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 23,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Arturo Vidal",
+  "starting_lineup": true,
+  "starting_position": "ML",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "player_id": 13423,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 36,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 27,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Gonzalo Castro",
+  "starting_lineup": true,
+  "starting_position": "AMC",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "team_id": 36,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 6427,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 6,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Simon Rolfes",
+  "starting_lineup": true,
+  "starting_position": "DMC",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "player_id": 3119,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 36,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 15,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Hans Sarpei",
+  "starting_lineup": true,
+  "starting_position": "DL",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "team_id": 36,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 11622,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "home",
+  "jersey_number": 29,
+  "minutes_played": 46,
+  "played": true,
+  "player_name": "Theofanis Gekas",
+  "starting_lineup": true,
+  "starting_position": "FW",
+  "team_name": "Bayer Leverkusen",
+  "week": 6
+}
+
+{
+  "team_id": 42,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 482,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 22,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Torsten Frings",
+  "starting_lineup": true,
+  "starting_position": "MC",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+{
+  "player_id": 6292,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 42,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 29,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Per Mertesacker",
+  "starting_lineup": true,
+  "starting_position": "DC",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+{
+  "team_id": 42,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 23205,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 10,
+  "minutes_played": 67,
+  "played": true,
+  "player_name": "Marko Marin",
+  "starting_lineup": true,
+  "starting_position": "FW",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+{
+  "team_id": 42,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 14172,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 4,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Naldo",
+  "starting_lineup": true,
+  "starting_position": "DC",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+{
+  "player_id": 10161,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 42,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 14,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Aaron Hunt",
+  "starting_lineup": true,
+  "starting_position": "ML",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+{
+  "team_id": 42,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 13757,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 2,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Sebastian Boenisch",
+  "starting_lineup": true,
+  "starting_position": "DL",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+{
+  "player_id": 41961,
+  "game_id": 328044,
+  "season": "2009-2010",
+  "team_id": 42,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 44,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Philipp Bargfrede",
+  "starting_lineup": true,
+  "starting_position": "MR",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+{
+  "team_id": 42,
+  "season": "2009-2010",
+  "game_id": 328044,
+  "player_id": 217,
+  "competition_country": "Germany",
+  "competition_name": "Bundesliga",
+  "game_date": {
+    "$date": "2009-09-20T16:30:00.000Z"
+  },
+  "game_venue": "away",
+  "jersey_number": 24,
+  "minutes_played": 91,
+  "played": true,
+  "player_name": "Claudio Pizarro",
+  "starting_lineup": true,
+  "starting_position": "FW",
+  "team_name": "Werder Bremen",
+  "week": 6
+}
+
+

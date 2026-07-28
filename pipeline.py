@@ -13,7 +13,7 @@ from prod_pipeline.sequence_data import SequenceData
 from prod_pipeline.backup_data import backup_season_data
 import argparse
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
+CONFIG_PATH = Path(__file__).resolve().parent / 'config' / 'config.yaml'
 
 def build_report(
         schedule: Optional[Dict[str, int]] = None,
@@ -70,10 +70,10 @@ def main(config_path: Path | str = CONFIG_PATH, season_year: str | None = None) 
     status = 'SUCCESS'
 
     try:
-        schedule_status = GameSchedule(config).save_schedule()
+        # schedule_status = GameSchedule(config).save_schedule()
         lineups_status = GameLineups(config).save_new_finished_game_lineups()
-        raw_status = RawEvents(config).save_new_finished_games()
-        processed_status = ProcessedEvents(config).save_processed_raw_games()
+        # raw_status = RawEvents(config).save_new_finished_games()
+        # processed_status = ProcessedEvents(config).save_processed_raw_games()
         game_stats_status = GameStats(config).save_game_stats()
         sequence_status = SequenceData(config).save_sequence_data()
         if (

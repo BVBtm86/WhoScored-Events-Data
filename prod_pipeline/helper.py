@@ -12,11 +12,11 @@ from typing import Dict, Any
 import undetected_chromedriver as uc
 import soccerdata._common as common
 
-from config import ScrapeDataConfig
+from prod_pipeline.config import ScrapeDataConfig
 
 logger = logging.getLogger(__name__)
 
-CHROME_MAJOR = 147
+CHROME_MAJOR = 149
 
 def setup_logging(level: int = logging.INFO) -> None:
     logging.basicConfig(
@@ -32,6 +32,7 @@ def patch_soccerdata_chromedriver() -> None:
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--start-maximized")
+        
         return uc.Chrome(options=opts, version_main=CHROME_MAJOR)
 
     common.BaseSeleniumReader._init_webdriver = patched_init_webdriver

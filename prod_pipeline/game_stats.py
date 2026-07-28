@@ -8,8 +8,8 @@ import pandas as pd
 from pymongo import MongoClient
 from pymongo.errors import BulkWriteError
 
-from helper import setup_logging, load_app_config, logger
-from config import ScrapeDataConfig
+from prod_pipeline.helper import setup_logging, load_app_config, logger
+from prod_pipeline.config import ScrapeDataConfig
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
@@ -277,9 +277,7 @@ class GameStats:
             'm_61_75': second_half & minute.ge(60) & minute.lt(75),
             'm_76_90': second_half & minute.ge(75),
             'm_1_30': minute.lt(30),
-            'm_16_45': first_half & minute.ge(15),
             'm_31_60': (first_half & minute.ge(30)) | (second_half & minute.lt(60)),
-            'm_46_75': second_half & minute.lt(75),
             'm_61_90': second_half & minute.ge(60),
         }
 

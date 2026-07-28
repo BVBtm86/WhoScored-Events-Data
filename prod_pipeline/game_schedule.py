@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Dict
 
@@ -7,8 +8,8 @@ import pandas as pd
 import soccerdata as sd
 from pymongo import MongoClient, UpdateOne
 
-from helper import setup_logging, patch_soccerdata, load_app_config, logger
-from config import ScrapeDataConfig
+from prod_pipeline.helper import setup_logging, patch_soccerdata, load_app_config, logger
+from prod_pipeline.config import ScrapeDataConfig
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
@@ -43,7 +44,7 @@ class GameSchedule:
         }
 
     def _read_season_schedule(self) -> pd.DataFrame:
-        df = self.ws.read_schedule(force_cache=False)
+        df = self.ws.read_schedule(force_cache=True)
         return df.reset_index(drop=False)
 
     def _read_fbref_schedule(self) -> pd.DataFrame:
@@ -52,7 +53,7 @@ class GameSchedule:
 
         df["fbref_date"] = pd.to_datetime(df["date"]).dt.date
 
-        return df[["week", "fbref_date", "home_team", "away_team", "referee", "attendance", "venue"]].rename(
+        return df[["week", "fbref_date", "home_team", "away_team"]].rename(
             columns={
                 "home_team": "fbref_home_team",
                 "away_team": "fbref_away_team",
@@ -81,6 +82,46 @@ class GameSchedule:
 
         return df
 
+    def _extract_games_info(self, game_ids: list[int]) -> pd.DataFrame:
+
+        rows: list[dict] = []
+        events_dir = (
+            self.ws.data_dir
+            / "events"
+            / f"{self.config.season.league}_{self.config.season.year_short}"
+        )
+
+        for game_id in game_ids:
+            event_file = events_dir / f"{game_id}.json"
+            if not event_file.exists():
+                logger.warning("No cached WhoScored event file for game_id=%s", game_id)
+                continue
+
+            with event_file.open("rb") as f:
+                data = json.load(f)
+
+            if not data:
+                logger.warning("Skipping empty WhoScored event file for game_id=%s", game_id)
+                continue
+
+            referee = data.get("referee") or {}
+            rows.append(
+                {
+                    "game_id": game_id,
+                    "stats_available": True,
+                    "home_manager": (data.get("home") or {}).get("managerName"),
+                    "away_manager": (data.get("away") or {}).get("managerName"),
+                    "referee": referee.get("name"),
+                    "venue": data.get("venueName"),
+                    "attendance": data.get("attendance"),
+                }
+            )
+
+        info_columns = [*self.config.schedule_games.match_stats_info, "stats_available"]
+        season_games_info = pd.DataFrame(rows, columns=info_columns)
+
+        return season_games_info
+    
     def _validate_required_columns(self, df: pd.DataFrame) -> None:
         required = set(self.config.schedule_games.required_columns)
         missing = required - set(df.columns)
@@ -112,21 +153,32 @@ class GameSchedule:
             else:
                 start_time = None
 
+            stats_available = row.get("stats_available")
+            if pd.isna(stats_available):
+                stats_available = False
+            else:
+                stats_available = bool(stats_available)
+
             docs.append({
-                'game_id': game_id,
-                'game_date': start_time,
-                'season': self.config.season.year,
-                'week': week,
-                'competition_name': self.config.season.name,
-                'competition_country': self.config.season.country,
-                'home_team_id': row.get('home_team_id'),
-                'home_team_name': row.get('home_team'),
-                'away_team_id': row.get('away_team_id'),
-                'away_team_name': row.get('away_team'),
-                'game_status': 'finished',
+                "game_id": game_id,
+                "game_date": start_time,
+                "season": self.config.season.year,
+                "week": week,
+                "competition_name": self.config.season.name,
+                "competition_country": self.config.season.country,
+                "home_team_id": row.get("home_team_id"),
+                "home_team_name": row.get("home_team"),
+                "home_goals": row.get("home_score"),
+                "home_manager": row.get("home_manager"),
+                "away_team_id": row.get("away_team_id"),
+                "away_team_name": row.get("away_team"),
+                "away_goals": row.get("away_score"),
+                "away_manager": row.get("away_manager"),
+                "game_status": "finished",
+                "stats_available": stats_available,
                 'referee': row.get('referee'),
-                'attendance': row.get('attendance'),
-                'venue': row.get('venue')
+                'venue': row.get('venue'),
+                'attendance': row.get('attendance')
             })
         return docs
 
@@ -136,10 +188,21 @@ class GameSchedule:
         schedule_df = self._process_fbref_schedule(df_ws=df_ws)
 
         finished_df = self._prepare_finished_schedule(df=schedule_df)
+
         if finished_df.empty:
             logger.info('No finished games found in schedule.')
             self.client.close()
             return {'processed': 0, 'upserted': 0}
+
+        game_ids = finished_df["game_id"].dropna().astype(int).tolist()
+        games_info = self._extract_games_info(game_ids)
+
+        finished_df = pd.merge(
+            left=finished_df,
+            right=games_info,
+            on="game_id",
+            how="left",
+        )
 
         docs = self._build_docs(finished_df)
         ops = [

@@ -7,8 +7,8 @@ from zipfile import ZipFile, ZIP_DEFLATED
 from bson import json_util
 from pymongo import MongoClient
 
-from helper import setup_logging, load_app_config, logger
-from config import ScrapeDataConfig
+from prod_pipeline.helper import setup_logging, load_app_config, logger
+from prod_pipeline.config import ScrapeDataConfig
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
@@ -23,6 +23,8 @@ def backup_season_data(config: ScrapeDataConfig) -> Dict[str, int]:
     season = config.season.year
     collections = {
         'schedule': config.mongo.collections['collection_schedule'],
+        'lineups': config.mongo.collections.get('collection_lineups', 'game_lineups'),
+        'formations': config.mongo.collections.get('collection_formations', 'game_formations'),
         'raw_events': config.mongo.collections['collection_raw_events'],
         'processed_events': config.mongo.collections['collection_processed_events'],
         'team_game_stats': config.mongo.collections.get('collection_team_game_stats', 'game_team_stats'),

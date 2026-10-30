@@ -269,7 +269,9 @@ class ProcessedEvents:
             default='Unknown',
         )
         events.loc[~shot_mask, 'shot_zone'] = None
-        shot_penalty = shot_mask & (has(events, 'Penalty') | has_id(events, 108)) & ~own_goal
+        # In this feed qualifier 9 is Penalty. Qualifier 108 is Volley; using
+        # it as a penalty flag turned ordinary shots into missed penalties.
+        shot_penalty = shot_mask & (has(events, 'Penalty') | has_id(events, 9)) & ~own_goal
         shot_fastbreak = shot_mask & has(events, 'FastBreak') & ~own_goal
         shot_set_piece = shot_mask & has_any(events, set_piece_quals) & ~shot_penalty & ~own_goal
         shot_open_play = shot_mask & has(events, 'RegularPlay') & ~shot_penalty & ~shot_fastbreak & ~shot_set_piece & ~own_goal
@@ -336,6 +338,8 @@ class ProcessedEvents:
         events['pass_corner'] = (pass_mask & (has(events, 'CornerTaken') | has_id(events, 6))).astype(int)
         events['pass_through_ball'] = (pass_mask & (has(events, 'Throughball') | has_id(events, 4))).astype(int)
         events['pass_throw_in'] = (pass_mask & (has(events, 'ThrowIn') | has_id(events, 107))).astype(int)
+        events['pass_goal_kick'] = (pass_mask & (has(events, 'GoalKick') | has(events, 'GoalKickTaken') | has_id(events, 7))).astype(int)
+        events['pass_kickoff'] = (pass_mask & (has(events, 'Kickoff') | has(events, 'KickOff') | has(events, 'KickoffTaken'))).astype(int)
         events['pass_key_pass_qualifier'] = (
             pass_mask & (has(events, 'KeyPass') | has_id(events, 24) | has_id(events, 210))
         ).astype(int)
@@ -397,13 +401,23 @@ class ProcessedEvents:
             ['Save', 'Claim', 'Punch', 'Keeper Pickup', 'Keeper Sweeper'],
             default=None,
         )
+        # The imported WhoScored records contain the authoritative card type in
+        # ``card_type`` (Yellow, SecondYellow or Red). Qualifier id 31 is not
+        # safe to use for second yellows: in this feed it is also emitted on
+        # ordinary yellow-card records. Prefer the source value and only use
+        # explicit qualifier names as a fallback.
+        source_card_type = events.get('card_type', pd.Series(index=events.index, dtype='object')).fillna('').astype(str)
+        source_card_type_normalized = source_card_type.str.replace(r'[^a-z]', '', regex=True).str.lower()
+        explicit_second_yellow = has(events, 'SecondYellow') | has(events, 'SecondYellowCard')
+        explicit_red = has(events, 'Red') | has(events, 'RedCard')
+        explicit_yellow = has(events, 'Yellow')
         events['card_type'] = np.select(
             [
-                has(events, 'SecondYellow') | has_id(events, 31) | has_id(events, 32),
-                has(events, 'Yellow'),
-                has(events, 'Red') | has_id(events, 33),
+                source_card_type_normalized.eq('secondyellow') | explicit_second_yellow,
+                source_card_type_normalized.eq('red') | explicit_red,
+                source_card_type_normalized.eq('yellow') | explicit_yellow,
             ],
-            ['Second Yellow', 'Yellow', 'Red'],
+            ['Second Yellow', 'Red', 'Yellow'],
             default=None,
         )
         events['substitution_type'] = np.select(

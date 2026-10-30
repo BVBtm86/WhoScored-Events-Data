@@ -27,6 +27,7 @@ def backup_season_data(config: ScrapeDataConfig) -> Dict[str, int]:
         'formations': config.mongo.collections.get('collection_formations', 'game_formations'),
         'raw_events': config.mongo.collections['collection_raw_events'],
         'processed_events': config.mongo.collections['collection_processed_events'],
+        'key_events': config.mongo.collections.get('collection_key_events', 'game_key_events'),
         'team_game_stats': config.mongo.collections.get('collection_team_game_stats', 'game_team_stats'),
         'player_game_stats': config.mongo.collections.get('collection_player_game_stats', 'game_player_stats'),
         'shot_sequences': config.mongo.collections.get('collection_shot_sequences', 'game_shot_sequences'),

@@ -4,6 +4,7 @@ import logging
 import traceback
 import smtplib
 import os
+import time
 from pathlib import Path
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -16,7 +17,35 @@ from prod_pipeline.config import ScrapeDataConfig
 
 logger = logging.getLogger(__name__)
 
-CHROME_MAJOR = 149
+
+class PipelineChrome(uc.Chrome):
+    def __del__(self):
+        try:
+            super().__del__()
+        except OSError as exc:
+            # undetected_chromedriver may quit an already closed Windows handle.
+            if getattr(exc, 'winerror', None) != 6:
+                raise
+
+def installed_chrome_major() -> int | None:
+    """Read the installed Windows Chrome version rather than pinning an old driver."""
+    if os.name != "nt":
+        return None
+
+    import winreg
+
+    for hive in (winreg.HKEY_CURRENT_USER, winreg.HKEY_LOCAL_MACHINE):
+        for key_path in (
+            r"Software\Google\Chrome\BLBeacon",
+            r"Software\WOW6432Node\Google\Chrome\BLBeacon",
+        ):
+            try:
+                with winreg.OpenKey(hive, key_path) as key:
+                    version, _ = winreg.QueryValueEx(key, "version")
+                return int(version.split(".")[0])
+            except (OSError, ValueError, AttributeError):
+                continue
+    return None
 
 def setup_logging(level: int = logging.INFO) -> None:
     logging.basicConfig(
@@ -33,9 +62,19 @@ def patch_soccerdata_chromedriver() -> None:
         opts.add_argument("--disable-dev-shm-usage")
         opts.add_argument("--start-maximized")
         
-        return uc.Chrome(options=opts, version_main=CHROME_MAJOR)
+        chrome_major = installed_chrome_major()
+        logger.info("Starting Chrome with driver major version %s", chrome_major or "auto")
+        return PipelineChrome(options=opts, version_main=chrome_major)
+
+    def wait_for_manual_captcha(self):
+        logger.warning(
+            'Complete the verification in the scraper Chrome window. '
+            'Waiting 30 seconds before retrying; keep the window open.'
+        )
+        time.sleep(30)
 
     common.BaseSeleniumReader._init_webdriver = patched_init_webdriver
+    common.BaseSeleniumReader.solve_captcha = wait_for_manual_captcha
 
 def patch_soccerdata_json_loader() -> None:
     """Handle WhoScored responses where JSON is wrapped inside minimal HTML."""

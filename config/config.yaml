@@ -11,14 +11,15 @@ mongo:
     collection_logs: error_logs
     collection_raw_events: game_raw_events
     collection_processed_events: game_processed_events
+    collection_key_events: game_key_events
     collection_team_game_stats: game_team_stats
     collection_player_game_stats: game_player_stats
     collection_shot_sequences: game_shot_sequences
     collection_pass_sequences: game_pass_sequences
 
 season: 
-  year: "2022-2023"
-  year_short: "2223"
+  year: "2026-2027"
+  year_short: "2627"
   league: "GER-Bundesliga"
   name: "Bundesliga"
   country: "Germany"
@@ -474,6 +475,23 @@ sequence_data:
     - y
     - end_x
     - end_y
+    - sequence_start_x
+    - sequence_start_y
+    - sequence_end_x
+    - sequence_end_y
+    - sequence_handoff_gap
+    - sequence_handoff_reconciled
+    - origin_type
+    - origin_event_id
+    - origin_event_type
+    - origin_player_id
+    - origin_player_name
+    - origin_team_id
+    - origin_minute
+    - origin_second
+    - origin_x
+    - origin_y
+    - origin_evidence
 
   sequence_action_types:
     - Pass
@@ -569,6 +587,17 @@ sequence_data:
     - sequence_end_player_id
     - sequence_end_player
     - sequence_end_side
+    - origin_type
+    - origin_event_id
+    - origin_event_type
+    - origin_player_id
+    - origin_player_name
+    - origin_team_id
+    - origin_minute
+    - origin_second
+    - origin_x
+    - origin_y
+    - origin_evidence
 
   shared_excluded_features:
     - shot_result

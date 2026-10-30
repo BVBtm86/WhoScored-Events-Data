@@ -31,7 +31,8 @@
       { "id": 72, "name": "leftFoot", "notes": "Left-footed action" },
       { "id": 22, "name": "otherBodyPart", "notes": "Knee, chest, etc." },
       { "id": 76, "name": "bigChance", "notes": "Big chance (high xG situation)" },
-      { "id": 108, "name": "penalty", "notes": "Penalty kick" },
+      { "id": 9, "name": "penalty", "notes": "Penalty kick" },
+      { "id": 108, "name": "volley", "notes": "Volley" },
       { "id": 136, "name": "directFK", "notes": "Direct free kick goal" },
       { "id": 154, "name": "volley", "notes": "Volley" },
       { "id": 328, "name": "strong", "notes": "Powerful shot" },
@@ -56,9 +57,23 @@
       { "id": 292, "name": "detailedPositionId", "notes": "Granular position on sub-on events (1-10)" }
     ],
     "card": [
-      { "id": 31, "name": "secondYellow", "notes": "Is this a second yellow?" },
+      { "id": 31, "name": "yellow", "notes": "Ordinary yellow-card qualifier in the imported WhoScored feed; use raw card_type to distinguish dismissals." },
       { "id": 32, "name": "secondYellowCard", "notes": "Second yellow card flag" },
       { "id": 33, "name": "redCard", "notes": "Straight red card" }
+    ],
+    "observedNames": [
+      { "name": "Assisted", "notes": "Observed qualifier name used for shot/pass relationships; no stable numeric ID is assumed." },
+      { "name": "Blocked", "notes": "Observed qualifier name used for saved/blocked shots." },
+      { "name": "BlockedCross", "notes": "Observed qualifier name used for blocked-cross classification." },
+      { "name": "Chipped", "notes": "Observed qualifier name used for pass height." },
+      { "name": "FastBreak", "notes": "Observed qualifier name used for shot situation." },
+      { "name": "KeyPass", "notes": "Observed qualifier name used for key-pass classification." },
+      { "name": "LeadingToAttempt", "notes": "Observed qualifier name used for error classification." },
+      { "name": "LeadingToGoal", "notes": "Observed qualifier name used for error classification." },
+      { "name": "OutfielderBlock", "notes": "Observed qualifier name used for outfielder-save/block classification; numeric fallback 94 remains explicitly documented as uncertain." },
+      { "name": "RegularPlay", "notes": "Observed qualifier name used for open-play shots." },
+      { "name": "SecondYellow", "notes": "Observed explicit second-yellow qualifier name; raw card_type remains authoritative." },
+      { "name": "Red", "notes": "Observed explicit red-card qualifier name; raw card_type remains authoritative." }
     ],
     "shotPosition": [
       { "id": 395, "name": "shotStartX", "notes": "X coordinate of shot origin (0-100)" },

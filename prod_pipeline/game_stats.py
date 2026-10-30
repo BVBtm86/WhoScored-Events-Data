@@ -350,6 +350,10 @@ class GameStats:
                 reordered_stats = {}
                 if possession is not None:
                     reordered_stats['possession'] = possession
+                # Own-goal events are recorded against the player/team that
+                # put the ball into their own net. For attacking statistics,
+                # expose them for the team that benefited on the scoreboard.
+                reordered_stats['own_goals'] = int(opponent_stats.get('shot_own_goal', 0) or 0)
                 reordered_stats['goals'] = goals
                 reordered_stats.update(stats)
                 stats.clear()

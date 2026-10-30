@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import types
+import json
 from pathlib import Path
 from typing import Any, Dict, Optional, Set
 
 import pandas as pd
 import soccerdata as sd
+from soccerdata.whoscored import WHOSCORED_DATADIR
 from pymongo import MongoClient, UpdateOne
 
 from prod_pipeline.helper import setup_logging, patch_soccerdata, load_app_config, logger
@@ -40,10 +42,11 @@ def infer_formation(position_string: str) -> str:
 
 
 class GameLineups:
-    def __init__(self, config: ScrapeDataConfig):
+    def __init__(self, config: ScrapeDataConfig, cache_only: bool = False):
         self.config = config
+        self.cache_only = cache_only
         patch_soccerdata()
-        self.ws = sd.WhoScored(
+        self.ws = types.SimpleNamespace(data_dir=WHOSCORED_DATADIR) if cache_only else sd.WhoScored(
             leagues=config.season.league,
             seasons=config.season.year,
         )
@@ -54,6 +57,51 @@ class GameLineups:
         self.collection_formations = self.db[config.mongo.collections['collection_formations']]
         self.collection_teams = self.db[config.mongo.collections['collection_teams']]
         self.formation_mapping = config.formation_mapping
+
+    @staticmethod
+    def _players_from_match(data: dict) -> pd.DataFrame:
+        """Read players directly from WhoScored, including unused substitutes."""
+        rows = []
+        duration = data.get('expandedMaxMinute')
+        for side in ('home', 'away'):
+            team = data.get(side) or {}
+            dismissals = {
+                event['playerId']: event.get('expandedMinute')
+                for event in team.get('incidentEvents', [])
+                if event.get('playerId') is not None
+                and (event.get('cardType') or {}).get('displayName') in ('Red', 'SecondYellow')
+            }
+            for player in team.get('players', []):
+                starter = bool(player.get('isFirstEleven', False))
+                start = 0 if starter else player.get('subbedInExpandedMinute')
+                end = dismissals.get(player['playerId'], player.get('subbedOutExpandedMinute', duration))
+                minutes = 0 if start is None else max(0, end - start) if end is not None else None
+                rows.append({
+                    'team_id': team['teamId'], 'player_id': player['playerId'],
+                    'player_name': player.get('name'), 'is_starter': starter,
+                    'minutes_played': minutes, 'jersey_number': player.get('shirtNo'),
+                    'starting_position': player.get('position'),
+                })
+        return pd.DataFrame(rows)
+
+    def _read_players(self, game_id: int) -> pd.DataFrame:
+        path = self.ws.data_dir / 'events' / f'{self.config.season.league}_{self.config.season.year_short}' / f'{game_id}.json'
+        data = json.loads(path.read_text(encoding='utf-8')) if path.exists() else None
+        if not data:
+            if self.cache_only:
+                raise ValueError(f'No cached match details for game_id={game_id}')
+            self.ws.read_events(match_id=game_id, output_fmt=None, retry_missing=True, on_error='raise')
+            data = json.loads(path.read_text(encoding='utf-8'))
+        if not data:
+            raise ValueError(f'WhoScored returned no match details for game_id={game_id}')
+        self._source_formations = {}
+        for side in ('home', 'away'):
+            team = data.get(side) or {}
+            formations = team.get('formations') or []
+            if formations and formations[0].get('formationName'):
+                scheme = str(formations[0]['formationName'])
+                self._source_formations[int(team['teamId'])] = scheme if '-' in scheme else '-'.join(scheme)
+        return self._players_from_match(data)
 
     def _finished_games_df(self) -> pd.DataFrame:
         docs = list(
@@ -214,7 +262,9 @@ class GameLineups:
                 continue
 
             position_string = '-'.join(positions)
-            mapped_formation = self.formation_mapping.get(position_string)
+            mapped_formation = self.formation_mapping.get(position_string) or getattr(
+                self, '_source_formations', {},
+            ).get(int(team_data['team_id'].iloc[0]))
             is_new_pattern = position_string not in known_patterns
 
             base_row = team_data.iloc[0]
@@ -361,20 +411,16 @@ class GameLineups:
         processed_games = 0
         affected_rows = 0
         formation_rows = 0
+        failed_games = 0
         unmapped_formations: list[dict[str, Any]] = []
         known_patterns = self._known_formation_patterns()
 
         for game_id in pending:
             try:
                 logger.info('Fetching lineups for game_id=%s', game_id)
-                loader = self.ws.read_events(
-                    match_id=game_id,
-                    output_fmt='loader',
-                    retry_missing=True,
-                    on_error='skip',
-                )
-                players = loader.players(game_id=game_id)
+                players = self._read_players(game_id)
                 if players is None or players.empty:
+                    failed_games += 1
                     logger.info('No lineup players available for game_id=%s', game_id)
                     continue
 
@@ -393,6 +439,7 @@ class GameLineups:
                 logger.info('Saved %s lineup rows for game_id=%s', len(lineups), game_id)
 
             except Exception:
+                failed_games += 1
                 logger.exception('Error processing lineups for game_id=%s', game_id)
 
         self.client.close()
@@ -405,6 +452,7 @@ class GameLineups:
             'processed_games': processed_games,
             'affected_rows': affected_rows,
             'formation_rows': formation_rows,
+            'failed_games': failed_games,
             'unmapped_formations': deduped_unmapped,
             'new_unmapped_formations': new_unmapped,
         }

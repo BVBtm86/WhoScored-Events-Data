@@ -16,6 +16,17 @@ CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
 class SequenceData:
 
+    QUALIFYING_OPPONENT_EVENTS = {
+        'Pass', 'BallTouch', 'BallRecovery', 'BlockedPass', 'KeeperPickup',
+        'Interception', 'Clearance', 'Save', 'TakeOn', 'Tackle', 'Aerial',
+        'KeeperSweeper', 'Claim', 'Punch', 'GoodSkill', 'ShieldBallOpp',
+    }
+    SUBSTITUTION_EVENTS = {'SubstitutionOff', 'SubstitutionOn'}
+    PERIOD_BOUNDARY_EVENTS = {
+        'Start', 'End', 'EndOfPeriod', 'EndOfGame', 'FullTime',
+        'HalfTime', 'PeriodEnd', 'MatchEnd',
+    }
+
     def __init__(self, config: ScrapeDataConfig):
         self.config = config
         self.client = MongoClient(config.mongo.url)
@@ -40,6 +51,19 @@ class SequenceData:
         self.shot_excluded_features = set(sequence_config.shot_excluded_features)
         self.pass_excluded_features = set(sequence_config.pass_excluded_features)
 
+    def _is_shot_event(self, event: pd.Series) -> bool:
+        """Return whether a processed event is a shot boundary.
+
+        ``shot_event`` is the canonical processed-event marker and covers
+        provider-specific shot type names (including blocked shots).  Keep the
+        configured type fallback for callers and older processed documents
+        that predate the marker.
+        """
+        marker = event.get('shot_event')
+        if pd.notna(marker):
+            return bool(marker)
+        return event.get('type') in self.shot_types | {'Goal'}
+
     def _processed_game_ids(self) -> Set[int]:
         return {
             int(x)
@@ -63,7 +87,7 @@ class SequenceData:
     def _origin_context(self, game_id: int, processed: pd.DataFrame) -> pd.DataFrame:
         """Add raw restart markers omitted by the processed-event projection."""
         raw = list(self.collection_raw_events.find(
-            {'season': self.config.season.year, 'game_id': game_id, 'type': 'Start'},
+            {'season': self.config.season.year, 'game_id': game_id, 'type': {'$in': ['Start', 'Kickoff', 'KickOff', 'KickoffTaken']}},
             {'_id': 0, 'event_idx': 1, 'type': 1, 'period': 1, 'team_id': 1,
              'team': 1, 'outcome_type': 1, 'minute': 1, 'second': 1,
              'x': 1, 'y': 1, 'player_id': 1, 'player': 1},
@@ -205,7 +229,7 @@ class SequenceData:
         if event_type in {'Save', 'Claim', 'Punch', 'Smother', 'KeeperPickup', 'KeeperSweeper'}:
             return 'Goalkeeper Restart'
 
-        if event_type in self.shot_types:
+        if self._is_shot_event(start_event):
             return 'After Shot'
 
         if event_type in {'Foul', 'OffsideGiven', 'OffsideProvoked', 'OffsidePass'}:
@@ -251,9 +275,11 @@ class SequenceData:
         }
 
     @staticmethod
-    def _restart_origin(event: Optional[pd.Series]) -> Optional[str]:
+    def _restart_origin(event: Optional[pd.Series], sequence_team_id: Optional[int] = None) -> Optional[str]:
         """Return the restart represented by a recorded pass, if any."""
         if event is None or event.get('type') != 'Pass':
+            return None
+        if sequence_team_id is not None and event.get('team_id') != sequence_team_id:
             return None
         if event.get('pass_corner') in (1, True):
             return 'Corner kick'
@@ -265,7 +291,42 @@ class SequenceData:
             return 'Goal kick'
         if event.get('pass_kickoff') in (1, True):
             return 'Kickoff'
+        if event.get('pass_penalty') in (1, True):
+            return 'Penalty kick'
         return None
+
+    @classmethod
+    def _restart_type(cls, event: Optional[pd.Series], sequence_team_id: Optional[int] = None) -> Optional[str]:
+        """Return a verified restart marker carried by an event.
+
+        A restart is a phase-of-play boundary even when the same team had the
+        ball immediately before it. Pass qualifiers are authoritative for the
+        restart pass itself; explicit restart event types cover feeds that
+        emit the restart separately.
+        """
+        if event is None:
+            return None
+        if sequence_team_id is not None and event.get('team_id') != sequence_team_id:
+            return None
+        qualified = cls._restart_origin(event, sequence_team_id)
+        if qualified:
+            return qualified
+        return {
+            'Corner': 'Corner kick',
+            'CornerTaken': 'Corner kick',
+            'ThrowIn': 'Throw-in',
+            'ThrowInTaken': 'Throw-in',
+            'FreeKick': 'Free kick',
+            'FreeKickTaken': 'Free kick',
+            'FreekickTaken': 'Free kick',
+            'GoalKick': 'Goal kick',
+            'GoalKickTaken': 'Goal kick',
+            'Kickoff': 'Kickoff',
+            'KickOff': 'Kickoff',
+            'KickoffTaken': 'Kickoff',
+            'Penalty': 'Penalty kick',
+            'PenaltyTaken': 'Penalty kick',
+        }.get(event.get('type'))
 
     @classmethod
     def _origin_event_type(
@@ -277,7 +338,51 @@ class SequenceData:
         """Classify one candidate without changing sequence boundaries."""
         if event is None:
             return None
-        restart = cls._restart_origin(event)
+        # Restart qualifiers belong to the team that performed the restart.
+        # An opposing throw-in/corner/free kick is evidence that the prior
+        # possession ended, never the origin of the new team's sequence.
+        if event.get('team_id') != sequence_team_id:
+            if event.get('type') in {
+                'Pass', 'BallTouch', 'BallRecovery', 'BlockedPass',
+                'KeeperPickup', 'Interception', 'Clearance', 'Save',
+                'TakeOn', 'Tackle', 'Aerial', 'KeeperSweeper', 'Claim',
+                'Punch', 'GoodSkill', 'ShieldBallOpp',
+            }:
+                labels = {
+                    'Pass': (
+                        'Unsuccessful opponent pass'
+                        if event.get('outcome_type') == 'Unsuccessful'
+                        else 'Opponent pass'
+                    ),
+                    'BallTouch': (
+                        'Unsuccessful opponent ball touch'
+                        if event.get('outcome_type') == 'Unsuccessful'
+                        else 'Opponent ball touch'
+                    ),
+                    'BallRecovery': 'Opponent ball recovery',
+                    'BlockedPass': 'Opponent blocked pass',
+                    'KeeperPickup': 'Opponent keeper pickup',
+                    'Interception': 'Opponent interception',
+                    'Clearance': 'Opponent clearance',
+                    'Save': 'Opponent save',
+                    'TakeOn': 'Opponent take-on',
+                    'Tackle': 'Opponent tackle',
+                    'Aerial': 'Opponent aerial duel',
+                    'KeeperSweeper': 'Opponent keeper sweeper',
+                    'Claim': 'Opponent claim',
+                    'Punch': 'Opponent punch',
+                    'GoodSkill': 'Opponent good skill',
+                    'ShieldBallOpp': 'Opponent shield ball',
+                }
+                return labels[event.get('type')]
+            if event.get('type') in {'Turnover', 'Dispossessed', 'Error'}:
+                return {
+                    'Error': 'Opponent error',
+                    'Dispossessed': 'Opponent dispossession',
+                    'Turnover': 'Opponent turnover',
+                }[event.get('type')]
+            return None
+        restart = cls._restart_origin(event, sequence_team_id)
         if restart:
             return restart
 
@@ -311,10 +416,12 @@ class SequenceData:
             return 'Free kick'
         if event_type in {'OffsideGiven', 'OffsidePass', 'OffsideProvoked'} and same_team:
             return 'Free kick'
-        if not same_team and event_type in {'Turnover', 'Dispossessed', 'Error'}:
-            return 'Opponent turnover'
         if same_team and event_type in {'TakeOn', 'BallTouch', 'GoodSkill'} and outcome == 'Successful':
-            return 'Open-play continuation'
+            return {
+                'TakeOn': 'Take-on won',
+                'BallTouch': 'Ball touch',
+                'GoodSkill': 'Good skill',
+            }[event_type]
         return None
 
     @staticmethod
@@ -352,6 +459,75 @@ class SequenceData:
         return values
 
     @classmethod
+    def _kickoff_origin_metadata(
+        cls,
+        event: Optional[pd.Series],
+        restarting_team_id: int,
+        evidence: str,
+        origin_type: str = 'Kickoff',
+    ) -> Dict[str, Any]:
+        """Build kickoff metadata without borrowing identity from the prior event.
+
+        A post-goal kickoff is often identified from the preceding goal because
+        the raw feed does not emit a separate restart row.  The goal scorer is
+        therefore not a valid kickoff player, and the goal's team is the team
+        that scored rather than the team restarting play.  Keep the recorded
+        timestamp/event as evidence, but make the restarting team authoritative
+        and only retain a player when the kickoff event itself belongs to that
+        team.
+        """
+        values = cls._origin_metadata(event, origin_type, evidence)
+        values['origin_team_id'] = restarting_team_id
+        if event is None or event.get('team_id') != restarting_team_id:
+            values['origin_player_id'] = None
+            values['origin_player_name'] = None
+        return values
+
+    @staticmethod
+    def _contextual_kickoff_label(
+        event: Optional[pd.Series],
+        context_df: Optional[pd.DataFrame] = None,
+        inferred_post_goal: bool = False,
+    ) -> str:
+        """Return a kickoff label grounded in period/restart context."""
+        if inferred_post_goal:
+            return 'Post-goal kickoff'
+        period = event.get('period') if event is not None else None
+        if period == 'FirstHalf':
+            return 'First-half kickoff'
+        if period == 'SecondHalf':
+            return 'Second-half kickoff'
+        normalized = str(period or '').lower().replace(' ', '').replace('_', '')
+        if 'extra' in normalized:
+            if 'second' in normalized or normalized.endswith('2'):
+                return 'Second extra-time kickoff'
+            return 'First extra-time kickoff'
+        return 'Kickoff'
+
+    @classmethod
+    def _contextual_restart_label(
+        cls,
+        restart: Optional[str],
+        event: Optional[pd.Series],
+        context_df: Optional[pd.DataFrame] = None,
+    ) -> Optional[str]:
+        if restart != 'Kickoff':
+            return restart
+        if event is not None and context_df is not None and not context_df.empty:
+            event_idx = event.get('event_idx')
+            preceding_goal = any(
+                row.get('type') == 'Goal'
+                and row.get('event_idx') is not None
+                and event_idx is not None
+                and row.get('event_idx') < event_idx
+                and row.get('period') == event.get('period')
+                for _, row in context_df.iterrows()
+            )
+            if preceding_goal:
+                return 'Post-goal kickoff'
+        return cls._contextual_kickoff_label(event, context_df)
+
+    @classmethod
     def _classify_sequence_origin(
         cls,
         sequence_df: pd.DataFrame,
@@ -373,16 +549,28 @@ class SequenceData:
         pass_rows = ordered[(ordered.get('type') == 'Pass') & (ordered.get('outcome_type') == 'Successful')]
         first_pass = pass_rows.iloc[0] if not pass_rows.empty else ordered.iloc[0]
 
-        restart = cls._restart_origin(first_pass)
-        if restart:
-            return cls._origin_metadata(first_pass, restart, 'first pass carries restart qualifier')
-
         timeline = context_df.copy() if context_df is not None and not context_df.empty else ordered
         if 'event_idx' not in timeline.columns:
             timeline['event_idx'] = range(len(timeline))
         timeline = timeline.sort_values(['event_idx'], kind='stable')
+        restart = cls._restart_origin(first_pass, sequence_team_id)
+        if restart:
+            return cls._origin_metadata(
+                first_pass,
+                cls._contextual_restart_label(restart, first_pass, timeline),
+                'first pass carries restart qualifier',
+            )
         anchor_idx = first_pass.get('event_idx')
         period = first_pass.get('period')
+        if pass_rows.empty:
+            # For zero-pass buildups, search from the terminal shot rather
+            # than excluding the first recorded recovery/action from origin
+            # classification. This keeps an explicit recovery as the origin
+            # while still allowing a preceding defensive intervention to be
+            # referenced when the first row is only an unsuccessful pass.
+            terminal = ordered.iloc[-1]
+            anchor_idx = terminal.get('event_idx')
+            period = terminal.get('period')
         candidates: list[pd.Series] = []
         if sequence_start_event is not None:
             candidates.append(sequence_start_event)
@@ -392,21 +580,178 @@ class SequenceData:
             and row.get('event_idx') != anchor_idx
             and row.get('event_idx') <= anchor_idx
         )
+        origin_context_candidates = list(candidates)
+
+        # Never let origin metadata cross a prior shot or restart. The
+        # boundary itself is contextual; only events after it may explain how
+        # this sequence began.
+        shot_boundaries = [
+            row.get('event_idx') for row in candidates
+            if row.get('event_idx') is not None
+            and row.get('event_idx') < anchor_idx
+            and (
+                bool(row.get('shot_event'))
+                or row.get('type') in {'Goal', 'SavedShot', 'MissedShots', 'ShotOnPost', 'BlockedShot'}
+            )
+        ]
+        restart_boundaries = [
+            row.get('event_idx') for row in candidates
+            if row.get('event_idx') is not None
+            and row.get('event_idx') < anchor_idx
+            and cls._restart_type(row, None) is not None
+        ]
+        latest_shot = max(shot_boundaries) if shot_boundaries else None
+        latest_restart = max(restart_boundaries) if restart_boundaries else None
+        latest_boundary = max(
+            value for value in (latest_shot, latest_restart) if value is not None
+        ) if (latest_shot is not None or latest_restart is not None) else None
+        if latest_boundary is not None:
+            candidates = [
+                row for row in candidates
+                if row.get('event_idx') is None
+                or row.get('event_idx') > latest_boundary
+                or (
+                    row.get('event_idx') == latest_restart
+                    and latest_restart is not None
+                    and (latest_shot is None or latest_restart > latest_shot)
+                )
+            ]
+
+        # A controlled opponent event is the latest evidence boundary. If no
+        # more specific origin exists after it, do not inherit an older
+        # recovery or turnover from a previous phase.
+        controlled_opponent_indices = [
+            row.get('event_idx') for row in candidates
+            if row.get('event_idx') is not None
+            and row.get('event_idx') < anchor_idx
+            and cls._controlled_team(row) not in (None, sequence_team_id)
+        ]
+        if controlled_opponent_indices:
+            latest_control = max(controlled_opponent_indices)
+            candidates = [
+                row for row in candidates
+                if row.get('event_idx') is None or row.get('event_idx') >= latest_control
+            ]
+
+        # An explicit same-team recovery/keeper recovery as the first action
+        # is more specific than an older contextual event.
+        if pass_rows.empty and not ordered.empty:
+            terminal = ordered.iloc[-1]
+            terminal_idx = terminal.get('event_idx')
+            prior_shots = [
+                row for _, row in timeline.iterrows()
+                if row.get('period') == period
+                and row.get('event_idx') is not None
+                and terminal_idx is not None
+                and row.get('event_idx') < terminal_idx
+                and row.get('team_id') == sequence_team_id
+                and (
+                    bool(row.get('shot_event'))
+                    or row.get('type') in {'Goal', 'SavedShot', 'MissedShots', 'ShotOnPost', 'BlockedShot'}
+                )
+            ]
+            if prior_shots:
+                prior_shot = max(prior_shots, key=lambda row: row.get('event_idx'))
+                between = [
+                    row for _, row in timeline.iterrows()
+                    if row.get('period') == period
+                    and row.get('event_idx') is not None
+                    and prior_shot.get('event_idx') < row.get('event_idx') < terminal_idx
+                ]
+                keeper_rebound = any(
+                    row.get('team_id') != sequence_team_id
+                    and row.get('type') in {'Save', 'Claim', 'Punch', 'Smother', 'KeeperPickup', 'KeeperSweeper'}
+                    for row in between
+                )
+                intervening_non_keeper = [
+                    row for row in between
+                    if row.get('type') not in {'Save', 'Claim', 'Punch', 'Smother', 'KeeperPickup', 'KeeperSweeper'}
+                ]
+                if keeper_rebound and not any(
+                    cls._is_stoppage_event(row)
+                    or cls._restart_type(row, None) is not None
+                    or cls._controlled_team(row) not in (None, sequence_team_id)
+                    or row.get('type') in {'Pass', 'Clearance', 'BlockedPass', 'Tackle', 'Challenge', 'Interception'}
+                    for row in intervening_non_keeper
+                ):
+                    return cls._origin_metadata(
+                        prior_shot,
+                        'Shot rebound',
+                        f"shot {prior_shot.get('event_idx')} followed by opponent goalkeeper action before next shot",
+                    )
+
+            first_action = ordered.iloc[0]
+            first_action_origin = cls._origin_event_type(first_action, sequence_team_id, first_action)
+            if first_action_origin:
+                return cls._origin_metadata(
+                    first_action,
+                    first_action_origin,
+                    f"first included action {first_action.get('event_idx')} classified from recorded type",
+                )
 
         # A Start record immediately before the first controlled pass is the
         # recorded kickoff. The same rule also covers a restart after a goal.
-        before = [row for row in candidates if row.get('event_idx') is not None]
+        before = [row for row in origin_context_candidates if row.get('event_idx') is not None]
         for row in reversed(before):
             if row.get('type') == 'Start' and row.get('team_id') == sequence_team_id:
                 if anchor_idx is not None and float(anchor_idx) - float(row.get('event_idx')) <= 2:
-                    return cls._origin_metadata(row, 'Kickoff', 'first pass follows recorded period start')
+                    return cls._kickoff_origin_metadata(
+                        row,
+                        sequence_team_id,
+                        'first pass follows recorded period start',
+                        cls._contextual_kickoff_label(row, timeline),
+                    )
                 break
             if row.get('type') in {'Goal', 'SavedShot', 'MissedShots', 'ShotOnPost'}:
                 if row.get('type') == 'Goal' and row.get('team_id') != sequence_team_id:
-                    return cls._origin_metadata(row, 'Kickoff', 'first pass follows opponent goal restart')
+                    goal_idx = row.get('event_idx')
+                    explicit_kickoffs = [
+                        candidate for _, candidate in timeline.iterrows()
+                        if candidate.get('event_idx') is not None
+                        and goal_idx is not None
+                        and anchor_idx is not None
+                        and float(candidate.get('event_idx')) > float(goal_idx)
+                        and float(candidate.get('event_idx')) <= float(anchor_idx)
+                        and candidate.get('type') in {'Kickoff', 'KickOff', 'KickoffTaken'}
+                        and candidate.get('team_id') == sequence_team_id
+                    ]
+                    explicit_kickoff = explicit_kickoffs[0] if explicit_kickoffs else None
+                    if explicit_kickoff is not None:
+                        return cls._kickoff_origin_metadata(
+                            explicit_kickoff,
+                            sequence_team_id,
+                            'explicit kickoff follows opponent goal',
+                            'Post-goal kickoff',
+                        )
+                    return cls._kickoff_origin_metadata(
+                        None,
+                        sequence_team_id,
+                        'kickoff inferred after opponent goal; no explicit kickoff event',
+                        'Post-goal kickoff',
+                    )
                 break
+        # Prefer a directly preceding unsuccessful opponent pass as the
+        # possession origin over the first same-team control touch.  The
+        # touch establishes control, but the failed opponent pass explains
+        # how the new phase began.
+        for candidate in reversed(candidates):
+            if (
+                candidate.get('type') == 'Pass'
+                and candidate.get('team_id') != sequence_team_id
+                and candidate.get('outcome_type') == 'Unsuccessful'
+                and anchor_idx is not None
+                and candidate.get('event_idx') is not None
+                and float(anchor_idx) - float(candidate.get('event_idx')) <= 2
+            ):
+                return cls._origin_metadata(
+                    candidate,
+                    'Unsuccessful opponent pass',
+                    f"event {candidate.get('event_idx')} precedes first controlled action",
+                )
         for candidate in reversed(candidates):
             classified = cls._origin_event_type(candidate, sequence_team_id, first_pass)
+            if classified == 'Kickoff':
+                classified = cls._contextual_restart_label('Kickoff', candidate, timeline)
             if (
                 not classified
                 and candidate.get('type') == 'Pass'
@@ -415,13 +760,38 @@ class SequenceData:
                 and anchor_idx is not None
                 and float(anchor_idx) - float(candidate.get('event_idx')) <= 2
             ):
-                classified = 'Opponent turnover'
+                classified = 'Unsuccessful opponent pass'
             if classified:
                 return cls._origin_metadata(candidate, classified, f"event {candidate.get('event_idx')} classified from recorded type/qualifiers")
+
+        # A new passing phase can follow a recorded shot without an explicit
+        # recovery/restart row. Preserve that traceable hard boundary as the
+        # origin instead of leaving the sequence without origin metadata.
+        if latest_shot is not None:
+            prior_shot = next(
+                (row for row in origin_context_candidates if row.get('event_idx') == latest_shot),
+                None,
+            )
+            if prior_shot is not None:
+                return cls._origin_metadata(
+                    prior_shot,
+                    'After shot',
+                    f"new phase follows recorded shot event {latest_shot}",
+                )
 
         # A sequence with a same-team possession action immediately before the
         # first pass is supported continuation; otherwise leave it unresolved
         # for diagnostics instead of inventing an origin.
+        if pass_rows.empty and any(
+            bool(row.get('shot_event'))
+            or row.get('type') in {'Goal', 'SavedShot', 'MissedShots', 'ShotOnPost', 'BlockedShot'}
+            for _, row in ordered.iterrows()
+        ):
+            return cls._origin_metadata(
+                None,
+                'Unknown / Unresolved',
+                'shot-only buildup without a verified rebound, recovery, or restart origin',
+            )
         return cls._origin_metadata(None, None, 'no possession-establishing or restart event found')
 
     @classmethod
@@ -433,22 +803,182 @@ class SequenceData:
         context_df: Optional[pd.DataFrame] = None,
     ) -> pd.DataFrame:
         metadata = cls._classify_sequence_origin(sequence_df, sequence_team_id, sequence_start_event, context_df)
+        if (
+            metadata.get('origin_type')
+            and not (
+                metadata.get('origin_type').lower().startswith(('opponent ', 'unsuccessful opponent '))
+                or metadata.get('origin_type') in {'After shot', 'Shot rebound'}
+            )
+            and metadata.get('origin_team_id') not in (None, sequence_team_id)
+        ):
+            metadata = cls._origin_metadata(
+                None,
+                None,
+                'origin candidate belonged to the opposing team; origin cleared',
+            )
+        if metadata.get('origin_type') and metadata.get('origin_player_id') is not None:
+            context = context_df if context_df is not None and not context_df.empty else sequence_df
+            player_rows = context[context['player_id'] == metadata['origin_player_id']] if 'player_id' in context.columns else pd.DataFrame()
+            player_teams = set(player_rows['team_id'].dropna().tolist()) if 'team_id' in player_rows.columns else set()
+            if metadata.get('origin_team_id') != sequence_team_id or (
+                player_teams and sequence_team_id not in player_teams
+            ):
+                metadata['origin_player_id'] = None
+                metadata['origin_player_name'] = None
+                if metadata.get('origin_type') != 'Opponent turnover':
+                    metadata['origin_team_id'] = sequence_team_id
         result = sequence_df.copy()
         for key, value in metadata.items():
             result[key] = value
         return result
+
+    @staticmethod
+    def _controlled_team(event: pd.Series) -> Optional[int]:
+        """Return the team that demonstrably controls the ball in an event."""
+        event_type = event.get('type')
+        if event.get('outcome_type') != 'Successful':
+            return None
+        if event_type in {'Pass', 'BallRecovery', 'TakeOn', 'BallTouch', 'GoodSkill'}:
+            return event.get('team_id')
+        # A successful interception/tackle/aerial is evidence of a challenge
+        # outcome, but not by itself proof that the team retained control.
+        return None
+
+    @staticmethod
+    def _is_stoppage_event(event: pd.Series) -> bool:
+        return event.get('type') in {
+            'Foul',
+            'OffsideGiven',
+            'OffsidePass',
+            'OffsideProvoked',
+        } | SequenceData.SUBSTITUTION_EVENTS | SequenceData.PERIOD_BOUNDARY_EVENTS
+
+    @classmethod
+    def _sequence_boundary_decision(
+        cls,
+        event: pd.Series,
+        sequence_team_id: int,
+        current_period: Optional[str],
+        game_data: Optional[pd.DataFrame] = None,
+        event_index: Optional[int] = None,
+        direction: str = 'forward',
+    ) -> str:
+        """Shared hard-boundary policy used by both sequence builders.
+
+        ``break`` is returned for shots, period/stoppage events, restarts and
+        qualifying successful opponent actions. Ambiguous unsuccessful
+        defensive events remain available to the bounded context resolver.
+        """
+        if event.get('period') != current_period:
+            return 'break'
+        if cls._is_shot_event_static(event) or cls._is_stoppage_event(event):
+            return 'break'
+        if cls._restart_type(event, sequence_team_id) is not None:
+            return 'break'
+        if event.get('type') in cls.PERIOD_BOUNDARY_EVENTS:
+            return 'break'
+        if event.get('team_id') != sequence_team_id:
+            if (
+                event.get('type') in cls.QUALIFYING_OPPONENT_EVENTS
+                and event.get('outcome_type') == 'Successful'
+            ):
+                return 'break'
+        return 'continue'
+
+    @staticmethod
+    def _is_shot_event_static(event: pd.Series) -> bool:
+        marker = event.get('shot_event')
+        if pd.notna(marker):
+            return bool(marker)
+        return event.get('type') in {'Goal', 'SavedShot', 'MissedShots', 'ShotOnPost', 'BlockedShot'}
+
+    def _bounded_control_evidence(
+        self,
+        game_data: pd.DataFrame,
+        event_index: int,
+        sequence_team_id: int,
+        current_period: Optional[str],
+        lookahead: int = 6,
+        same_team_shot_continues: bool = True,
+    ) -> Optional[str]:
+        """Resolve a defensive intervention using a bounded chronological window.
+
+        The caller examines events after the intervention, whether it is scanning
+        forward for a passing chain or backward from a shot.  A controlled action
+        is stronger evidence than a generic successful defensive event.
+        """
+        end = min(len(game_data), event_index + 1 + lookahead)
+        for index in range(event_index + 1, end):
+            candidate = game_data.iloc[index]
+            if candidate.get('period') != current_period:
+                return 'stoppage'
+            if self._is_stoppage_event(candidate):
+                return 'stoppage'
+            if self._is_shot_event(candidate):
+                # A shot by the sequence team is evidence that the team
+                # retained control through the intervention. It is terminal
+                # for the buildup, but not a possession boundary before it.
+                if candidate.get('team_id') == sequence_team_id:
+                    return 'same_team' if same_team_shot_continues else 'stoppage'
+                return 'stoppage'
+            controlled_team = self._controlled_team(candidate)
+            if controlled_team == sequence_team_id:
+                return 'same_team'
+            if controlled_team is not None and controlled_team != sequence_team_id:
+                return 'opponent'
+            # Restart markers are boundaries even when the raw feed does not
+            # provide a player or a successful outcome for the restart.
+            if candidate.get('type') in {'Start', 'Kickoff', 'KickOff', 'KickoffTaken'}:
+                return 'stoppage'
+        return None
+
+    def _intervention_decision(
+        self,
+        event: pd.Series,
+        sequence_team_id: int,
+        game_data: Optional[pd.DataFrame],
+        event_index: Optional[int],
+        current_period: Optional[str],
+        same_team_shot_continues: bool = True,
+    ) -> str:
+        """Return keep/ignore/break for an opponent defensive intervention."""
+        if game_data is None or event_index is None:
+            return 'ignore' if event.get('outcome_type') == 'Unsuccessful' else 'break'
+        evidence = self._bounded_control_evidence(
+            game_data,
+            event_index,
+            sequence_team_id,
+            current_period,
+            same_team_shot_continues=same_team_shot_continues,
+        )
+        if evidence == 'same_team':
+            return 'ignore'
+        if evidence in {'opponent', 'stoppage'}:
+            return 'break'
+        # An unsuccessful defensive action is context only. A successful but
+        # unresolved intervention is conservatively treated as a boundary.
+        return 'ignore' if event.get('outcome_type') == 'Unsuccessful' else 'break'
 
     def _shooting_valid_sequence_event(
         self,
         event: pd.Series,
         shooting_team_id: int,
         current_period: str,
+        game_data: Optional[pd.DataFrame] = None,
+        event_index: Optional[int] = None,
     ) -> str:
         event_type = event['type']
         outcome = event.get('outcome_type')
         event_period = event.get('period')
 
-        if event_period != current_period:
+        shared_boundary = self._sequence_boundary_decision(
+            event, shooting_team_id, current_period, game_data, event_index, direction='backward'
+        )
+        if shared_boundary == 'break':
+            # A restart pass is part of the new buildup, but it is also the
+            # hard boundary that stops the backward scan.
+            if event.get('team_id') == shooting_team_id and event.get('type') == 'Pass' and self._restart_type(event, shooting_team_id):
+                return 'keep_break'
             return 'break'
 
         if event_type in self.ignore_types:
@@ -460,18 +990,55 @@ class SequenceData:
         same_team = event['team_id'] == shooting_team_id
 
         if not same_team:
-            # Unsuccessful opponent pressure is context only. It does not
-            # belong to the possession sequence and must not split it.
-            if event_type in self.opponent_pressure_types and outcome == 'Unsuccessful':
-                return 'ignore'
-            # Any other opponent action marks a possession boundary.
+            if event_type == 'Error':
+                return self._intervention_decision(
+                    event,
+                    shooting_team_id,
+                    game_data,
+                    event_index,
+                    current_period,
+                )
+            if event_type in self.opponent_pressure_types or event_type in {
+                'BlockedPass',
+                'Clearance',
+                'Interception',
+                'Tackle',
+                'Challenge',
+            }:
+                return self._intervention_decision(
+                    event,
+                    shooting_team_id,
+                    game_data,
+                    event_index,
+                    current_period,
+                )
             return 'break'
 
         if event_type in {'Dispossessed', 'Turnover', 'Error'}:
+            evidence = self._bounded_control_evidence(
+                game_data,
+                event_index,
+                shooting_team_id,
+                current_period,
+            ) if game_data is not None and event_index is not None else None
+            return 'keep' if evidence == 'same_team' else 'break'
+
+        # A prior shot is always a display-chain boundary. A rebound may let
+        # the same team shoot again, but the new buildup must not absorb the
+        # passes that preceded the earlier shot.
+        if self._is_shot_event(event):
             return 'break'
 
         if event_type in {'Pass', 'TakeOn', 'BallTouch'}:
-            return 'keep' if outcome == 'Successful' else 'break'
+            if outcome == 'Successful':
+                return 'keep'
+            evidence = self._bounded_control_evidence(
+                game_data,
+                event_index,
+                shooting_team_id,
+                current_period,
+            ) if game_data is not None and event_index is not None else None
+            return 'keep' if evidence == 'same_team' else 'break'
 
         if event_type in self.sequence_action_types:
             return 'break' if outcome == 'Unsuccessful' else 'keep'
@@ -517,7 +1084,13 @@ class SequenceData:
                 sequence_rows.append(event)
                 j -= 1
                 continue
-            decision = self._shooting_valid_sequence_event(event, shooting_team_id, current_period)
+            decision = self._shooting_valid_sequence_event(
+                event,
+                shooting_team_id,
+                current_period,
+                game_data,
+                j,
+            )
 
             if decision == 'ignore':
                 j -= 1
@@ -527,6 +1100,11 @@ class SequenceData:
                 sequence_rows.append(event)
                 j -= 1
                 continue
+
+            if decision == 'keep_break':
+                sequence_rows.append(event)
+                start_event = event
+                break
 
             if decision == 'break':
                 start_event = event
@@ -553,7 +1131,9 @@ class SequenceData:
             & (sequence_df['outcome_type'] == 'Successful')
         ]
         first_action = qualifying_passes.iloc[0] if not qualifying_passes.empty else sequence_df.iloc[0]
-        sequence_df['sequence_start_reason'] = 'First qualifying pass'
+        sequence_df['sequence_start_reason'] = (
+            'First qualifying pass' if not qualifying_passes.empty else 'Shot without prior successful pass'
+        )
         sequence_df = sequence_df.assign(**self._event_metadata(first_action, 'sequence_start'))
         sequence_df = sequence_df.assign(**self._event_metadata(game_data.loc[shot_index], 'sequence_end'))
         sequence_df = self._apply_origin_metadata(sequence_df, shooting_team_id, start_event, origin_context if origin_context is not None else game_data)
@@ -614,16 +1194,20 @@ class SequenceData:
         event: pd.Series,
         passing_team_id: int,
         current_period: str,
+        game_data: Optional[pd.DataFrame] = None,
+        event_index: Optional[int] = None,
     ) -> str:
         event_type = event['type']
         outcome = event.get('outcome_type')
         event_period = event.get('period')
         same_team = event['team_id'] == passing_team_id
 
-        if event_period != current_period:
+        if self._sequence_boundary_decision(
+            event, passing_team_id, current_period, game_data, event_index, direction='forward'
+        ) == 'break':
             return 'break'
 
-        if event_type in self.ignore_types:
+        if event_type in self.ignore_types and event_type not in self.SUBSTITUTION_EVENTS:
             return 'ignore'
 
         if event_type in {'OffsideGiven', 'OffsideProvoked'}:
@@ -635,20 +1219,35 @@ class SequenceData:
         if not same_team:
             if event_type == 'Error':
                 return 'ignore'
-            if event_type in self.opponent_pressure_types and outcome == 'Unsuccessful':
-                return 'ignore'
-            if event_type == 'Pass':
-                return 'break'
+            if event_type in self.opponent_pressure_types or event_type in {
+                'BlockedPass',
+                'Clearance',
+                'Interception',
+                'Tackle',
+                'Challenge',
+            }:
+                return self._intervention_decision(
+                    event,
+                    passing_team_id,
+                    game_data,
+                    event_index,
+                    current_period,
+                    same_team_shot_continues=False,
+                )
             return 'keep_break'
 
         if event_type == 'Error':
             return 'keep'
 
         if event_type in {'Dispossessed', 'Turnover'}:
-            return 'keep_break'
-
-        if event_type in self.shot_types:
-            return 'break'
+            evidence = self._bounded_control_evidence(
+                game_data,
+                event_index,
+                passing_team_id,
+                current_period,
+                same_team_shot_continues=False,
+            ) if game_data is not None and event_index is not None else None
+            return 'ignore' if evidence == 'same_team' else 'keep_break'
 
         if event_type in self.break_types:
             return 'keep_break'
@@ -656,8 +1255,23 @@ class SequenceData:
         if event_type in {'Pass', 'BallTouch', 'TakeOn', 'GoodSkill'} and outcome == 'Successful':
             return 'keep'
 
-        if event_type in {'Pass', 'BallTouch'} and outcome != 'Successful':
-            return 'keep_break'
+        if event_type == 'Pass' and outcome != 'Successful':
+            evidence = self._bounded_control_evidence(
+                game_data,
+                event_index,
+                passing_team_id,
+                current_period,
+            ) if game_data is not None and event_index is not None else None
+            return 'keep' if evidence == 'same_team' else 'keep_break'
+
+        if event_type == 'BallTouch' and outcome != 'Successful':
+            evidence = self._bounded_control_evidence(
+                game_data,
+                event_index,
+                passing_team_id,
+                current_period,
+            ) if game_data is not None and event_index is not None else None
+            return 'ignore' if evidence == 'same_team' else 'keep_break'
 
         return 'ignore'
 
@@ -680,7 +1294,7 @@ class SequenceData:
         if same_team and event_type == 'Goal':
             return 'Goal'
 
-        if same_team and event_type in self.shot_types:
+        if same_team and self._is_shot_event(event):
             return 'Shot'
 
         if same_team and event_type == 'Pass' and outcome != 'Successful':
@@ -693,8 +1307,10 @@ class SequenceData:
             return 'Offside'
 
         if not same_team:
-            if event_type in {'Pass', 'OffsidePass'}:
-                return 'Loss Possession'
+            if event_type == 'Pass':
+                return 'Opponent pass' if outcome == 'Successful' else 'Unsuccessful opponent pass'
+            if event_type == 'OffsidePass':
+                return 'Opponent offside pass'
             return event_type
 
         return event_type
@@ -711,11 +1327,11 @@ class SequenceData:
         period_changed: bool = False,
     ) -> list[pd.Series]:
         sequence_team = current_rows[0].get('team')
-        if sequence_ending == 'Loss Possession':
-            same_team_rows = [row for row in current_rows if row.get('team_id') == current_team_id]
-            sequence_end_event = same_team_rows[-1] if same_team_rows else current_rows[-1]
-        else:
-            sequence_end_event = event
+        # Keep the terminating event separate from the last displayed pass.
+        # The latter is the final row in current_rows; sequence_end_* must
+        # identify the event that actually ended the chain, including an
+        # opponent pass/recovery when possession changed.
+        sequence_end_event = event
 
         for row in current_rows:
             first_action = current_rows[0]
@@ -734,9 +1350,7 @@ class SequenceData:
                 for key, value in SequenceData._event_metadata(sequence_end_event, 'sequence_end').items():
                     row[key] = value
                 row['sequence_end_side'] = (
-                    'same_team'
-                    if sequence_ending == 'Loss Possession' or event.get('team_id') == current_team_id
-                    else 'opponent'
+                    'same_team' if event.get('team_id') == current_team_id else 'opponent'
                 )
 
         origin_metadata = self._classify_sequence_origin(
@@ -753,7 +1367,10 @@ class SequenceData:
         if game_data.empty:
             return pd.DataFrame()
 
-        game_data = game_data.sort_values(['period', 'minute', 'second', 'event_idx']).reset_index(drop=True)
+        # event_idx is the provider's canonical chronological order. Sorting
+        # by the human-readable period label can place extra periods or
+        # stoppage rows incorrectly, so never use the label as the primary key.
+        game_data = game_data.sort_values('event_idx').reset_index(drop=True)
 
         sequences = []
         current_rows: list[pd.Series] = []
@@ -766,6 +1383,31 @@ class SequenceData:
             event_type = event['type']
             outcome = event.get('outcome_type')
 
+            restart = self._restart_type(event, current_team_id)
+            if current_team_id is not None and restart:
+                # A restart begins a new phase even if the restarting team is
+                # unchanged. Finalize the prior chain before considering this
+                # event as the first pass of the new chain.
+                sequence_ending = restart
+                current_rows = self._add_passing_sequence_end_metadata(
+                    current_rows=current_rows,
+                    start_event=current_start_event,
+                    current_team_id=current_team_id,
+                    event=event,
+                    game_data=game_data,
+                    sequence_ending=sequence_ending,
+                    origin_context=origin_context,
+                )
+                sequences.extend(current_rows)
+                sequence_id += 1
+                current_rows = []
+                current_team_id = None
+                current_period = None
+                current_start_event = None
+
+            if restart and event_type != 'Pass':
+                continue
+
             if current_team_id is None:
                 if event_type == 'Pass' and outcome == 'Successful':
                     current_team_id = event['team_id']
@@ -777,12 +1419,21 @@ class SequenceData:
                     current_rows = [row]
                 continue
 
-            pass_decision = self._passing_valid_sequence_event(event, current_team_id, current_period)
+            pass_decision = self._passing_valid_sequence_event(
+                event,
+                current_team_id,
+                current_period,
+                game_data,
+                idx,
+            )
 
             if pass_decision == 'keep':
-                row = event.copy()
-                row['sequence_id'] = sequence_id
-                current_rows.append(row)
+                # Non-pass controlled actions keep possession alive but are
+                # deliberately not stored as displayed passing actions.
+                if event_type == 'Pass':
+                    row = event.copy()
+                    row['sequence_id'] = sequence_id
+                    current_rows.append(row)
                 continue
 
             if pass_decision == 'keep_break':
@@ -879,6 +1530,10 @@ class SequenceData:
         sequences_df = sequences_df.groupby('sequence_id', group_keys=False).filter(
             lambda group: int(((group['type'] == 'Pass') & (group['outcome_type'] == 'Successful')).sum()) >= 2
         )
+        # Shot-ending chains are represented by the shot-buildup collection;
+        # keep the passing collection strictly for non-shot passing sequences.
+        if not sequences_df.empty and 'sequence_ending' in sequences_df.columns:
+            sequences_df = sequences_df[~sequences_df['sequence_ending'].isin({'Shot', 'Goal'})]
         if sequences_df.empty:
             return sequences_df
         sequences_df = self._reconcile_sequence_coordinates(sequences_df)

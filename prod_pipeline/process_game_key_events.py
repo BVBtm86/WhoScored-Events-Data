@@ -27,7 +27,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from prod_pipeline.helper import load_app_config, setup_logging
 
 CLASSIFICATION_VERSION = "1.3"
-SOURCE_COLLECTION = "game_processed_events"
+SOURCE_COLLECTION = "game_processed_events_raw"
 DESTINATION = "game_key_events"
 STATE_COLLECTION = "game_key_event_state"
 LOG = logging.getLogger(__name__)

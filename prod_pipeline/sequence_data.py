@@ -84,6 +84,13 @@ class SequenceData:
         }
         return shot_ids & pass_ids
 
+    def _pass_sequence_game_ids(self) -> Set[int]:
+        return {
+            int(x)
+            for x in self.collection_pass_sequences.distinct('game_id', {'season': self.config.season.year})
+            if x is not None
+        }
+
     def _origin_context(self, game_id: int, processed: pd.DataFrame) -> pd.DataFrame:
         """Add raw restart markers omitted by the processed-event projection."""
         raw = list(self.collection_raw_events.find(
@@ -1547,9 +1554,9 @@ class SequenceData:
             )
         ].reset_index(drop=True)
 
-    def save_sequence_data(self, limit: Optional[int] = None) -> Dict[str, int]:
+    def save_sequence_data(self, limit: Optional[int] = None, passes_only: bool = False) -> Dict[str, int]:
         processed_ids = self._processed_game_ids()
-        sequence_ids = self._sequence_game_ids()
+        sequence_ids = self._pass_sequence_game_ids() if passes_only else self._sequence_game_ids()
         pending = sorted(processed_ids - sequence_ids)
         if limit is not None:
             pending = pending[:limit]
@@ -1572,25 +1579,27 @@ class SequenceData:
                     continue
 
                 origin_context = self._origin_context(game_id, game_events)
-                shot_sequences = self.build_shot_sequences_for_game(game_events, origin_context)
+                shot_sequences = pd.DataFrame() if passes_only else self.build_shot_sequences_for_game(game_events, origin_context)
                 pass_sequences = self.build_passing_sequences_for_game(game_events, origin_context)
                 shot_records = self._records_for_mongo(shot_sequences)
                 pass_records = self._records_for_mongo(pass_sequences)
 
-                self.collection_shot_sequences.delete_many({'season': self.config.season.year, 'game_id': game_id})
+                if not passes_only:
+                    self.collection_shot_sequences.delete_many({'season': self.config.season.year, 'game_id': game_id})
                 self.collection_pass_sequences.delete_many({'season': self.config.season.year, 'game_id': game_id})
 
                 shot_inserted = 0
                 pass_inserted = 0
                 try:
-                    if shot_records:
+                    if not passes_only and shot_records:
                         result = self.collection_shot_sequences.insert_many(shot_records, ordered=False)
                         shot_inserted = len(result.inserted_ids)
                     if pass_records:
                         result = self.collection_pass_sequences.insert_many(pass_records, ordered=False)
                         pass_inserted = len(result.inserted_ids)
                 except BulkWriteError as bwe:
-                    self.collection_shot_sequences.delete_many({'season': self.config.season.year, 'game_id': game_id})
+                    if not passes_only:
+                        self.collection_shot_sequences.delete_many({'season': self.config.season.year, 'game_id': game_id})
                     self.collection_pass_sequences.delete_many({'season': self.config.season.year, 'game_id': game_id})
                     logger.warning(
                         'BulkWriteError for sequence data game_id=%s, details=%s',

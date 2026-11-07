@@ -11,7 +11,11 @@ from prod_pipeline.processed_events import ProcessedEvents
 from prod_pipeline.game_stats import GameStats
 from prod_pipeline.sequence_data import SequenceData
 from prod_pipeline.backup_data import backup_season_data
+from prod_pipeline.indexes import ensure_application_indexes
 import argparse
+import subprocess
+import sys
+from pymongo import MongoClient
 
 CONFIG_PATH = Path(__file__).resolve().parent.parent / 'config' / 'config.yaml'
 
@@ -22,6 +26,7 @@ def build_report(
         processed_events: Optional[Dict[str, int]] = None,
         game_stats: Optional[Dict[str, int]] = None,
         sequence_data: Optional[Dict[str, int]] = None,
+        app_projection: Optional[Dict[str, int]] = None,
         backup: Optional[Dict[str, int]] = None) -> str:
     schedule = schedule or {}
     lineups = lineups or {}
@@ -29,6 +34,7 @@ def build_report(
     processed_events = processed_events or {}
     game_stats = game_stats or {}
     sequence_data = sequence_data or {}
+    app_projection = app_projection or {}
     backup = backup or {}
     return (
         f"Schedule: processed={schedule.get('processed')} upserted={schedule.get('upserted')}\n"
@@ -37,6 +43,7 @@ def build_report(
         f"Processed events: processed_games={processed_events.get('processed_games')} inserted_rows={processed_events.get('inserted_rows')}\n"
         f"Game stats: processed_games={game_stats.get('processed_games')} team_rows={game_stats.get('team_rows')} player_rows={game_stats.get('player_rows')}\n"
         f"Sequence data: processed_games={sequence_data.get('processed_games')} shot_rows={sequence_data.get('shot_rows')} pass_rows={sequence_data.get('pass_rows')}\n"
+        f"App projections: status={app_projection.get('status')} season={app_projection.get('season')}\n"
         f"Backup: exported_count={backup.get('exported_count')}\n"
         + (
             "New formation patterns:\n"
@@ -65,6 +72,7 @@ def main(config_path: Path | str = CONFIG_PATH, season_year: str | None = None) 
     processed_status = {'processed_games': 0, 'inserted_rows': 0}
     game_stats_status = {'processed_games': 0, 'team_rows': 0, 'player_rows': 0}
     sequence_status = {'processed_games': 0, 'shot_rows': 0, 'pass_rows': 0}
+    app_projection_status = {'status': 'NOT_RUN', 'season': config.season.year}
     backup_status = {'exported_count': 0}
     report = ''
     status = 'SUCCESS'
@@ -76,6 +84,25 @@ def main(config_path: Path | str = CONFIG_PATH, season_year: str | None = None) 
         processed_status = ProcessedEvents(config).save_processed_raw_games()
         game_stats_status = GameStats(config).save_game_stats()
         sequence_status = SequenceData(config).save_sequence_data()
+        subprocess.run(
+            [
+                sys.executable,
+                '-m',
+                'dev_scripts.build_app_collections',
+                '--source-url', config.mongo.url,
+                '--target-url', config.mongo.url,
+                '--database', config.mongo.db,
+                '--season', config.season.year,
+                '--write',
+            ],
+            check=True,
+        )
+        app_projection_status = {'status': 'SUCCESS', 'season': config.season.year}
+        index_client = MongoClient(config.mongo.url)
+        try:
+            ensure_application_indexes(index_client[config.mongo.db])
+        finally:
+            index_client.close()
         if (
             lineups_status.get('affected_rows', 0) > 0
             or raw_status.get('inserted_rows', 0) > 0
@@ -94,6 +121,7 @@ def main(config_path: Path | str = CONFIG_PATH, season_year: str | None = None) 
             processed_events=processed_status,
             game_stats=game_stats_status,
             sequence_data=sequence_status,
+            app_projection=app_projection_status,
             backup=backup_status,
         )
         logger.info('Pipeline finished successfully.')

@@ -49,7 +49,15 @@ def ensure_application_indexes(db: Database) -> dict[str, list[str]]:
         if collection_name not in existing:
             continue
         names: list[str] = []
+        current_indexes = list(db[collection_name].list_indexes())
         for fields in specifications:
+            # Indexes created by the projection builder may already have the
+            # same key pattern with a different uniqueness setting. Reuse an
+            # existing matching index instead of raising IndexKeySpecsConflict.
+            if any(list(index.get("key", [])) == list(fields) for index in current_indexes):
+                matching = next(index for index in current_indexes if list(index.get("key", [])) == list(fields))
+                names.append(str(matching["name"]))
+                continue
             name = db[collection_name].create_index(fields)
             names.append(name)
         created[collection_name] = names

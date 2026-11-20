@@ -3,6 +3,10 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import Dict
+from unicodedata import normalize
+from urllib.request import urlopen
+
+import re
 
 import pandas as pd
 import soccerdata as sd
@@ -76,11 +80,7 @@ class GameSchedule:
             seasons=config.season.year,
             no_cache=not force_cache,
         )
-        self.fbref = sd.FBref(
-            leagues=config.season.league,
-            seasons=config.season.year,
-            no_cache=not force_cache,
-        )
+        self.fbref = None
         self.client = MongoClient(config.mongo.url)
         self.db = self.client[config.mongo.db]
         self.collection_schedule = self.db[config.mongo.collections['collection_schedule']]
@@ -98,6 +98,11 @@ class GameSchedule:
         return df
 
     def _read_fbref_schedule(self) -> pd.DataFrame:
+        self.fbref = sd.FBref(
+            leagues=self.config.season.league,
+            seasons=self.config.season.year,
+            no_cache=not self.force_cache,
+        )
         df = self.fbref.read_schedule().reset_index(drop=False)
         for column in ('home_team', 'away_team'):
             df[column] = df[column].replace({'Frankfurt': 'Eintracht Frankfurt'})
@@ -108,6 +113,56 @@ class GameSchedule:
         return df[["week", "fbref_date", "home_team", "away_team"]].rename(columns={
             "home_team": "fbref_home_team", "away_team": "fbref_away_team", "week": "week",
         })
+
+    def _add_matchdays(self, fixtures: pd.DataFrame) -> pd.DataFrame:
+        if self.config.season.league == 'GER-Bundesliga':
+            try:
+                return self._openligadb_matchdays(fixtures)
+            except (OSError, ValueError, KeyError) as error:
+                logger.warning('OpenLigaDB matchdays unavailable (%s); trying FBref.', error)
+        return self._process_fbref_schedule(fixtures)
+
+    def _openligadb_matchdays(self, fixtures: pd.DataFrame) -> pd.DataFrame:
+        first_year = int(self.config.season.year.split('-', 1)[0])
+        with urlopen(f'https://api.openligadb.de/getmatchdata/bl1/{first_year}', timeout=20) as response:
+            matches = json.load(response)
+
+        def team_key(name: str) -> str:
+            letters = normalize('NFKD', name.casefold()).encode('ascii', 'ignore').decode('ascii')
+            key = re.sub(r'[^a-z0-9]', '', letters)
+            return {
+                'bayerleverkusen': 'leverkusen',
+                'bayernmunich': 'bayern',
+                'borussiadortmund': 'dortmund',
+                'borussiamgladbach': 'gladbach',
+                'eintrachtfrankfurt': 'frankfurt',
+                'fckoln': 'koln',
+                'hamburgersv': 'hsv',
+                'mainz05': 'mainz',
+                'rbleipzig': 'leipzig',
+                'schalke04': 's04',
+                'vfbstuttgart': 'stuttgart',
+                'werderbremen': 'bremen',
+            }.get(key, key)
+
+        rounds = {}
+        for match in matches:
+            home = team_key(match['team1']['shortName'])
+            away = team_key(match['team2']['shortName'])
+            week = match['group']['groupOrderID']
+            if (home, away) in rounds or not isinstance(week, int) or not 1 <= week <= 34:
+                raise ValueError('OpenLigaDB returned an invalid or duplicate Bundesliga pairing')
+            rounds[home, away] = week
+
+        weeks = [
+            rounds.get((team_key(home), team_key(away)))
+            for home, away in zip(fixtures['home_team'], fixtures['away_team'])
+        ]
+        missing = weeks.count(None)
+        if missing:
+            raise ValueError(f'OpenLigaDB has no matchday for {missing} WhoScored fixtures')
+        logger.info('Assigned OpenLigaDB matchdays to %s WhoScored fixtures.', len(weeks))
+        return fixtures.assign(week=weeks)
 
     def _process_fbref_schedule(self, df_ws: pd.DataFrame) -> pd.DataFrame:
         team_map = self._read_team_mapping()
@@ -263,7 +318,7 @@ class GameSchedule:
     def _save_schedule(self, matchday: int | None) -> Dict[str, int]:
         
         df_ws = self._read_season_schedule()
-        schedule_df = self._process_fbref_schedule(df_ws=df_ws)
+        schedule_df = self._add_matchdays(df_ws)
 
         finished_df = self._prepare_schedule(df=schedule_df)
         if matchday is not None:

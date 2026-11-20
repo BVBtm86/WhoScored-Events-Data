@@ -4,28 +4,17 @@ import logging
 import traceback
 import smtplib
 import os
+import platform
 import time
 from pathlib import Path
 from datetime import datetime, timezone
 from email.message import EmailMessage
 from typing import Dict, Any
 
-import undetected_chromedriver as uc
-import soccerdata._common as common
-
 from prod_pipeline.config import ScrapeDataConfig
 
 logger = logging.getLogger(__name__)
 
-
-class PipelineChrome(uc.Chrome):
-    def __del__(self):
-        try:
-            super().__del__()
-        except OSError as exc:
-            # undetected_chromedriver may quit an already closed Windows handle.
-            if getattr(exc, 'winerror', None) != 6:
-                raise
 
 def installed_chrome_major() -> int | None:
     """Read the installed Windows Chrome version rather than pinning an old driver."""
@@ -54,9 +43,34 @@ def setup_logging(level: int = logging.INFO) -> None:
     )
 
 def patch_soccerdata_chromedriver() -> None:
-    """Patch SoccerData Selenium reader to use undetected_chromedriver."""
+    """Configure the Chrome driver used by SoccerData."""
+
+    try:
+        import distutils.version
+    except ModuleNotFoundError:
+        import setuptools  # Provides distutils for undetected_chromedriver on newer Python.
+
+    import soccerdata._common as common
+    import undetected_chromedriver as uc
+
+    class PipelineChrome(uc.Chrome):
+        def __del__(self):
+            try:
+                super().__del__()
+            except OSError as exc:
+                # undetected_chromedriver may quit an already closed Windows handle.
+                if getattr(exc, 'winerror', None) != 6:
+                    raise
 
     def patched_init_webdriver(self):
+        if platform.system() == "Darwin" and platform.machine() == "arm64":
+            from selenium import webdriver
+
+            options = webdriver.ChromeOptions()
+            options.add_argument("--start-maximized")
+            logger.info("Starting Chrome with Selenium Manager on Apple Silicon")
+            return webdriver.Chrome(options=options)
+
         opts = uc.ChromeOptions()
         opts.add_argument("--no-sandbox")
         opts.add_argument("--disable-dev-shm-usage")

@@ -4,18 +4,30 @@ from pathlib import Path
 from typing import Dict, Optional
 from datetime import datetime
 from prod_pipeline.helper import setup_logging, patch_soccerdata, load_app_config, send_email, format_exception, logger
-from prod_pipeline.game_schedule import GameSchedule, refresh_schedule_details
-from prod_pipeline.game_lineups import GameLineups
-from prod_pipeline.raw_events import RawEvents
-from prod_pipeline.processed_events import ProcessedEvents
-from prod_pipeline.process_game_key_events import KeyEventProcessor
-from prod_pipeline.game_stats import GameStats
-from prod_pipeline.sequence_data import SequenceData
-from prod_pipeline.backup_data import backup_season_data
+from prod_pipeline.indexes import ensure_application_indexes
 from pymongo import MongoClient
 import argparse
+import os
 
 CONFIG_PATH = Path(__file__).resolve().parent / 'config' / 'config.yaml'
+
+
+def atlas_connection_uri() -> str:
+    uri = os.environ.get("ATLAS_MONGO_URI", "").strip()
+    if uri:
+        return uri
+
+    env_file = CONFIG_PATH.parent.parent / ".env"
+    if not env_file.is_file():
+        return ""
+    for line in env_file.read_text(encoding="utf-8").splitlines():
+        key, separator, value = line.strip().removeprefix("export ").partition("=")
+        if separator and key.strip() == "ATLAS_MONGO_URI":
+            value = value.strip()
+            if len(value) >= 2 and value[0] in ("'", '"') and value[-1] == value[0]:
+                return value[1:-1]
+            return value
+    return ""
 
 
 def clear_derived_season(config) -> None:
@@ -92,11 +104,11 @@ def main(
         mongo_uri: str | None = None,
         schedule_only: bool = False,
         matchday: int | None = None,
-        rebuild_derived: bool = False) -> None:
+        rebuild_derived: bool = False,
+        atlas_only: bool = False) -> None:
     if matchday is not None and (not schedule_only or not 1 <= matchday <= 34):
         raise ValueError('--matchday requires --schedule-only and a value from 1 to 34.')
     setup_logging()
-    patch_soccerdata()
     config = load_app_config(str(config_path))
     if mongo_uri:
         config.mongo.url = mongo_uri
@@ -106,8 +118,36 @@ def main(
         start_year, end_year = season_year.split('-')
         config.season.year_short = start_year[-2:] + end_year[-2:]
 
+
+    atlas_uri = atlas_connection_uri()
+    if not atlas_uri and not schedule_only:
+        raise ValueError("Set ATLAS_MONGO_URI in the environment or project .env to publish app collections to Atlas.")
+
+    def sync_atlas(*, fixtures_only: bool = False) -> None:
+        if atlas_uri:
+            from prod_pipeline.atlas_sync import publish_season
+
+            counts = publish_season(config, atlas_uri, schedule_only=fixtures_only)
+            logger.info("Atlas publication complete for %s: %s", config.season.year, counts)
+
+    if atlas_only:
+        sync_atlas()
+        return
+
+    patch_soccerdata()
+    from prod_pipeline.game_schedule import GameSchedule, refresh_schedule_details
+    from prod_pipeline.game_lineups import GameLineups
+    from prod_pipeline.raw_events import RawEvents
+    from prod_pipeline.processed_events import ProcessedEvents
+    from prod_pipeline.process_game_key_events import KeyEventProcessor
+    from prod_pipeline.game_stats import GameStats
+    from prod_pipeline.sequence_data import SequenceData
+    from prod_pipeline.atlas_sync import publish_app_projections
+    from prod_pipeline.backup_data import backup_season_data, missing_app_backups
+
     if schedule_only:
         result = GameSchedule(config, force_cache=False).save_schedule(matchday=matchday)
+        sync_atlas(fixtures_only=True)
         logger.info('Schedule-only run finished: %s. Other stages and email skipped.', result)
         return
         
@@ -138,33 +178,6 @@ def main(
         ).run("backfill", season=config.season.year, stop_on_error=True)
         game_stats_status = GameStats(config).save_game_stats()
         sequence_status = SequenceData(config).save_sequence_data()
-        if (
-            lineups_status.get('affected_rows', 0) > 0
-            or raw_status.get('inserted_rows', 0) > 0
-            or processed_status.get('inserted_rows', 0) > 0
-            or key_events_status.get('events', 0) > 0
-            or game_stats_status.get('team_rows', 0) > 0
-            or game_stats_status.get('player_rows', 0) > 0
-            or sequence_status.get('shot_rows', 0) > 0
-            or sequence_status.get('pass_rows', 0) > 0
-        ):
-            backup_status = backup_season_data(config)
-
-        report = build_report(
-            schedule=schedule_status,
-            lineups=lineups_status,
-            raw_events=raw_status,
-            processed_events=processed_status,
-            key_events=key_events_status,
-            game_stats=game_stats_status,
-            sequence_data=sequence_status,
-            backup=backup_status,
-        )
-        if lineups_status.get('failed_games', 0):
-            status = 'PARTIAL'
-            logger.warning('Pipeline finished with %s lineup failures.', lineups_status['failed_games'])
-        else:
-            logger.info('Pipeline finished successfully.')
     except Exception as exc:
         status = 'FAILED'
         report = f"Pipeline failed: {format_exception(exc)}"
@@ -174,6 +187,47 @@ def main(
         except Exception:
             logger.exception('Failure cleanup also failed for season %s.', config.season.year)
         raise
+
+    with MongoClient(config.mongo.url, serverSelectionTimeoutMS=10000) as client:
+        database = client[config.mongo.db]
+        schedule = database[config.mongo.collections['collection_schedule']]
+        game_ids = schedule.distinct('game_id', {'season': config.season.year})
+        counts = publish_app_projections(database, database, config.season.year, game_ids)
+        logger.info('Refreshed local app projections: %s', counts)
+
+    sync_atlas()
+
+    if (
+        lineups_status.get('affected_rows', 0) > 0
+        or raw_status.get('inserted_rows', 0) > 0
+        or processed_status.get('inserted_rows', 0) > 0
+        or key_events_status.get('events', 0) > 0
+        or game_stats_status.get('team_rows', 0) > 0
+        or game_stats_status.get('player_rows', 0) > 0
+        or sequence_status.get('shot_rows', 0) > 0
+        or sequence_status.get('pass_rows', 0) > 0
+        or missing_app_backups(config)
+    ):
+        backup_status = backup_season_data(config)
+
+    report = build_report(
+        schedule=schedule_status,
+        lineups=lineups_status,
+        raw_events=raw_status,
+        processed_events=processed_status,
+        key_events=key_events_status,
+        game_stats=game_stats_status,
+        sequence_data=sequence_status,
+        backup=backup_status,
+    )
+    if lineups_status.get('failed_games', 0):
+        status = 'PARTIAL'
+        logger.warning('Pipeline finished with %s lineup failures.', lineups_status['failed_games'])
+    else:
+        logger.info('Pipeline finished successfully.')
+
+    with MongoClient(config.mongo.url, serverSelectionTimeoutMS=10000) as index_client:
+        ensure_application_indexes(index_client[config.mongo.db])
 
     if config.email and config.email.password:
         day = datetime.now().date().strftime('%d-%m-%Y')
@@ -225,9 +279,16 @@ if __name__ == '__main__':
         help='Save only this matchday. Requires --schedule-only.',
     )
 
+    parser.add_argument(
+        '--atlas-only', action='store_true',
+        help='Publish the season already saved in local MongoDB to Atlas without collecting matches.',
+    )
+
     args = parser.parse_args()
+    if args.atlas_only and (args.full or args.rebuild_derived or args.schedule_only):
+        parser.error('--atlas-only cannot be combined with processing or schedule options')
     if args.matchday is not None and not args.schedule_only:
         parser.error('--matchday requires --schedule-only')
     main(season_year=args.season_year, full=args.full, mongo_uri=args.mongo_uri,
          schedule_only=args.schedule_only, matchday=args.matchday,
-         rebuild_derived=args.rebuild_derived)
+         rebuild_derived=args.rebuild_derived, atlas_only=args.atlas_only)

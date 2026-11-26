@@ -185,12 +185,15 @@ def send_email(
     body: str,
     use_tls: bool = True,
     timeout: int = 20,
+    html_body: str | None = None,
 ) -> None:
     msg = EmailMessage()
     msg["Subject"] = subject
     msg["From"] = from_email
     msg["To"] = to_email
     msg.set_content(body)
+    if html_body is not None:
+        msg.add_alternative(html_body, subtype="html")
 
     try:
         if use_tls:

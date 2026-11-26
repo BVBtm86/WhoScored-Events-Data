@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from itertools import islice
 from typing import Iterable
 
@@ -32,9 +33,22 @@ ATLAS_DATABASE = "WhoScored"
 BATCH_SIZE = 500
 
 
+@dataclass(frozen=True)
+class WriteCounts:
+    added: int = 0
+    updated: int = 0
+
+    @property
+    def total(self) -> int:
+        return self.added + self.updated
+
+    def __add__(self, other: WriteCounts) -> WriteCounts:
+        return WriteCounts(self.added + other.added, self.updated + other.updated)
+
+
 def upsert_documents(collection, documents: Iterable[dict], key_fields: tuple[str, ...], *,
-                     insert_only: bool = False) -> int:
-    count = 0
+                     insert_only: bool = False) -> WriteCounts:
+    count = WriteCounts()
     operator = "$setOnInsert" if insert_only else "$set"
     remaining = iter(documents)
     while batch := list(islice(remaining, BATCH_SIZE)):
@@ -43,8 +57,8 @@ def upsert_documents(collection, documents: Iterable[dict], key_fields: tuple[st
             identity = {field: document[field] for field in key_fields}
             fields = {key: value for key, value in document.items() if key != "_id"}
             operations.append(UpdateOne(identity, {operator: fields}, upsert=True))
-        collection.bulk_write(operations, ordered=False)
-        count += len(operations)
+        result = collection.bulk_write(operations, ordered=False)
+        count += WriteCounts(result.upserted_count, result.modified_count)
     return count
 
 
@@ -56,10 +70,10 @@ def project_documents(collection, query: dict, project, identity: tuple[str, ...
         yield document
 
 
-def publish_app_projections(source, target, season: str, game_ids: Iterable[int]) -> dict[str, int]:
+def publish_app_projections(source, target, season: str, game_ids: Iterable[int]) -> dict[str, WriteCounts]:
     """Refresh the season’s app collections from derived match data."""
     query = {"season": season}
-    counts: dict[str, int] = {}
+    counts: dict[str, WriteCounts] = {}
     game_ids = tuple(game_ids)
     for source_name, target_name, project, identity in (
         (SOURCE_EVENTS, TARGET_EVENTS, app_event, ("game_id", "event_idx")),
@@ -73,7 +87,7 @@ def publish_app_projections(source, target, season: str, game_ids: Iterable[int]
         )
 
     for source_name, target_name in ((SOURCE_SHOTS, TARGET_SHOTS), (SOURCE_PASSES, TARGET_PASSES)):
-        counts[target_name] = 0
+        counts[target_name] = WriteCounts()
         for game_id in game_ids:
             rows = source[source_name].find({**query, "game_id": game_id}, {"_id": 0})
             counts[target_name] += upsert_documents(
@@ -82,7 +96,7 @@ def publish_app_projections(source, target, season: str, game_ids: Iterable[int]
     return counts
 
 
-def publish_season(config: ScrapeDataConfig, atlas_uri: str, *, schedule_only: bool = False) -> dict[str, int]:
+def publish_season(config: ScrapeDataConfig, atlas_uri: str, *, schedule_only: bool = False) -> dict[str, WriteCounts]:
     if atlas_uri.rstrip("/") == config.mongo.url.rstrip("/"):
         raise ValueError("Atlas publication requires a destination separate from the local database.")
 

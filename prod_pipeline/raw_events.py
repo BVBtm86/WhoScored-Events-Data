@@ -79,7 +79,9 @@ class RawEvents:
             for record in merged.to_dict(orient='records')
         ]
 
-    def save_new_finished_games(self, limit: Optional[int] = None) -> Dict[str, int]:
+    def save_new_finished_games(
+        self, limit: Optional[int] = None, *, attempted_ids: Set[int] | None = None,
+    ) -> Dict[str, int]:
         finished_df = self._finished_games_df()
         if finished_df.empty:
             logger.info('No finished schedule games found for raw event extraction.')
@@ -101,6 +103,8 @@ class RawEvents:
         inserted_rows_total = 0
 
         for game_id in pending:
+            if attempted_ids is not None:
+                attempted_ids.add(game_id)
             try:
                 logger.info('Fetching raw events for game_id=%s', game_id)
                 events = self.ws.read_events(match_id=game_id, output_fmt='events')
